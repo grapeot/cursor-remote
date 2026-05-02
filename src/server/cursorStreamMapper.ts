@@ -35,12 +35,6 @@ interface CursorAssistantMessage extends CursorBaseMessage {
   };
 }
 
-interface CursorThinkingMessage extends CursorBaseMessage {
-  type: 'thinking';
-  text: string;
-  thinking_duration_ms?: number;
-}
-
 interface CursorToolCallMessage extends CursorBaseMessage {
   type: 'tool_call';
   call_id: string;
@@ -76,19 +70,9 @@ export function mapCursorStreamMessage(message: unknown, context: CursorStreamCo
   if (isCursorAssistantMessage(message)) {
     return message.message.content.flatMap((block) => mapAssistantBlock(block, cursorEventType));
   }
-  if (isCursorThinkingMessage(message)) {
-    return [
-      withCursorType(
-        {
-          type: 'thinking.delta',
-          payload: {
-            text: message.text,
-            ...(message.thinking_duration_ms !== undefined ? { thinkingDurationMs: message.thinking_duration_ms } : {})
-          }
-        },
-        cursorEventType
-      )
-    ];
+  // Cursor `thinking` stream messages are coalesced in CursorSdkGateway (see ThinkingCoalescer).
+  if (isRecord(message) && message.type === 'thinking') {
+    return [];
   }
   if (isCursorToolCallMessage(message)) {
     return [withCursorType(mapToolCallMessage(message), cursorEventType, message.call_id)];
@@ -245,10 +229,6 @@ function isAssistantBlock(value: unknown): value is CursorTextBlock | CursorTool
     return typeof value.text === 'string';
   }
   return value.type === 'tool_use' && typeof value.id === 'string' && typeof value.name === 'string' && 'input' in value;
-}
-
-function isCursorThinkingMessage(message: unknown): message is CursorThinkingMessage {
-  return isRecord(message) && message.type === 'thinking' && typeof message.text === 'string';
 }
 
 function isCursorToolCallMessage(message: unknown): message is CursorToolCallMessage {

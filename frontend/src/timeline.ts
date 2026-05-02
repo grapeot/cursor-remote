@@ -7,7 +7,6 @@ export type TimelineTone = 'muted' | 'running' | 'success' | 'error';
 export type TimelineItem =
   | { kind: 'user'; id: string; runId?: string; text: string; status: 'sent' | 'failed'; createdAt: string }
   | { kind: 'assistant'; id: string; runId?: string; text: string; status: 'streaming' | 'completed' | 'failed'; createdAt: string }
-  | { kind: 'thinking'; id: string; runId?: string; text: string; status: 'streaming' | 'completed'; createdAt: string }
   | {
       kind: 'tool';
       id: string;
@@ -71,43 +70,6 @@ export function buildTimeline(messages: MessageProjection[], runs: RunProjection
   return [...items.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 }
 
-function thinkingKey(event: AppEvent): string {
-  return `thinking-${event.runId ?? `n-${event.sessionId}`}`;
-}
-
-function mergeThinkingDelta(items: Map<string, TimelineItem>, event: AppEvent): void {
-  const text = readStringField(event.payload, 'text');
-  if (text === undefined || text.trim().length === 0) {
-    return;
-  }
-  const id = thinkingKey(event);
-  const existing = items.get(id);
-  if (existing !== undefined && existing.kind === 'thinking') {
-    items.set(id, {
-      ...existing,
-      text: existing.text + text,
-      status: 'streaming'
-    });
-    return;
-  }
-  items.set(id, {
-    kind: 'thinking',
-    id,
-    ...(event.runId !== undefined ? { runId: event.runId } : {}),
-    text,
-    status: 'streaming',
-    createdAt: event.createdAt
-  });
-}
-
-function mergeThinkingCompleted(items: Map<string, TimelineItem>, event: AppEvent): void {
-  const id = thinkingKey(event);
-  const existing = items.get(id);
-  if (existing !== undefined && existing.kind === 'thinking') {
-    items.set(id, { ...existing, status: 'completed' });
-  }
-}
-
 function mergeToolTimelineEvent(items: Map<string, TimelineItem>, event: AppEvent): void {
   const tool = readToolPayload(event.payload);
   if (tool === undefined) {
@@ -136,14 +98,6 @@ function mergeToolTimelineEvent(items: Map<string, TimelineItem>, event: AppEven
 }
 
 function mergeEventIntoTimeline(items: Map<string, TimelineItem>, event: AppEvent): void {
-  if (event.type === 'thinking.delta') {
-    mergeThinkingDelta(items, event);
-    return;
-  }
-  if (event.type === 'thinking.completed') {
-    mergeThinkingCompleted(items, event);
-    return;
-  }
   if (event.type === 'tool.started' || event.type === 'tool.completed' || event.type === 'tool.error') {
     mergeToolTimelineEvent(items, event);
     return;

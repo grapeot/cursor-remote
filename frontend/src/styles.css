@@ -280,6 +280,7 @@ h3 {
 
 .timeline {
   display: grid;
+  grid-template-columns: 1fr minmax(0, 2.75fr) 1fr;
   align-content: start;
   gap: 12px;
   overflow: auto;
@@ -295,7 +296,10 @@ h3 {
 }
 
 .chat-empty {
+  grid-column: 1 / -1;
   max-width: 680px;
+  justify-self: center;
+  width: min(680px, 100%);
   padding: 28px;
 }
 
@@ -311,13 +315,15 @@ h3 {
 }
 
 .user-item {
+  grid-column: 2 / -1;
   justify-self: end;
-  max-width: min(720px, 86%);
+  max-width: min(720px, 100%);
   border-color: rgba(53, 97, 212, 0.22);
   background: var(--color-primary-subtle);
 }
 
 .assistant-item {
+  grid-column: 1 / 3;
   justify-self: start;
 }
 
@@ -409,19 +415,24 @@ h3 {
   margin: 14px 0;
 }
 
-.thinking-item,
 .status-item {
+  grid-column: 1 / 3;
+  justify-self: start;
   border-style: dashed;
   background: var(--color-surface-muted);
-}
-
-.status-item {
-  justify-self: start;
-  max-width: min(520px, 56%);
+  max-width: min(520px, 100%);
   min-width: min(360px, 36%);
   padding: 10px 13px;
   box-shadow: none;
   font-size: 0.84rem;
+}
+
+.tool-span-full.tool-card {
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
 }
 
 .tool-card {
@@ -443,9 +454,10 @@ h3 {
 }
 
 .tool-card-summary {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 9px;
+  gap: 10px 14px;
   padding: 10px 14px;
   cursor: pointer;
   user-select: none;
@@ -458,12 +470,28 @@ h3 {
 
 .tool-card-type {
   font-weight: 800;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-card-summary .tool-status {
+  justify-self: end;
 }
 
 .tool-card-icon {
   opacity: 0.85;
   font-size: 0.9rem;
   line-height: 1;
+}
+
+.tool-status {
+  color: var(--color-text-tertiary);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .tool-card-body {
@@ -735,6 +763,21 @@ button:disabled {
 
   .session-row {
     min-width: 220px;
+  }
+
+  .timeline {
+    grid-template-columns: 1fr;
+  }
+
+  .user-item,
+  .assistant-item,
+  .status-item,
+  .tool-span-full.tool-card,
+  .chat-empty {
+    grid-column: auto;
+    width: 100%;
+    justify-self: stretch;
+    max-width: 100%;
   }
 
   .timeline-item,

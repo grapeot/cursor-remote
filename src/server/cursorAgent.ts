@@ -3,6 +3,7 @@ import type { AppConfig } from './config.js';
 import type { RunSummary, SendPromptRequest, StartRunRequest } from '../shared/contracts.js';
 import type { AppEventType } from '../shared/events.js';
 import { makeCursorStreamContext, mapCursorStreamMessage } from './cursorStreamMapper.js';
+import { isCursorThinkingStreamMessage, ThinkingCoalescer } from './thinkingFlush.js';
 
 export interface CursorAgentGateway {
   startRun(request: SendPromptRequest): Promise<RunSummary>;
@@ -70,7 +71,7 @@ export class MockCursorAgentGateway implements CursorAgentGateway, AsyncCursorGa
         createdAt: timestamp,
         updatedAt: timestamp,
         resultText:
-          'Mock run created. Set CURSOR_API_KEY, CURSOR_RUNTIME=local (or cloud), and use npm run dev:op when the key comes from 1Password.'
+          'Mock run created. Set CURSOR_API_KEY, CURSOR_RUNTIME=local (or cloud), restart the stack, then try a real SDK run.'
       },
       {
         repoUrl: normalizeOptional(request.repoUrl),
@@ -211,10 +212,21 @@ export class CursorSdkGateway implements CursorAgentGateway, AsyncCursorGateway 
     const streamContext = makeCursorStreamContext(runId, request, runtime, modelId);
 
     void (async () => {
+      const thinkingCoalescer = new ThinkingCoalescer(runId);
       try {
         const run = await agent.send(request.prompt);
         for await (const message of run.stream()) {
+          if (isCursorThinkingStreamMessage(message)) {
+            thinkingCoalescer.push(message);
+            continue;
+          }
+          for (const flushed of thinkingCoalescer.flush()) {
+            onEvent(flushed);
+          }
           mapCursorStreamMessage(message, streamContext).forEach(onEvent);
+        }
+        for (const flushed of thinkingCoalescer.flush()) {
+          onEvent(flushed);
         }
         const result = await run.wait();
         onEvent({

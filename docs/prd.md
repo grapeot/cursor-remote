@@ -34,13 +34,13 @@ OpenCode 的价值在于 runtime 和 client 分得很清楚：`opencode serve` /
 - Chat timeline 必须直接渲染 user prompt、assistant text、thinking/activity、tool call cards、run status、final result 和 error。Raw SSE event stream 只能作为调试信息，不能作为主 UI。
 - UI direction follows `docs/design.md`: premium developer console, compact status chrome, environment badges, mono prompt composer, and restrained Cursor-only visual language. 视觉 polish 排在功能形态之后。
 - Node/Express backend，持有 `CURSOR_API_KEY`、`CURSOR_RUNTIME=local`、`CURSOR_LOCAL_CWD` 和默认 model。Cloud runtime 可以保留为 SDK 对照实验，但产品路径按 local Cursor remote-control 设计。
-- 默认 self-bootstrapping cwd 指向本 repo：`/Users/grapeot/co/knowledge_working/adhoc_jobs/cursor_cloud_remote_poc`。产品运行时 Cursor 可以编辑这个应用自己；live tests 必须另建一次性 sandbox，避免直接修改真实 repo。
+- 默认 self-bootstrapping cwd 使用 `CURSOR_LOCAL_CWD=.`（仓库根）；产品运行时 Cursor 可以编辑这个应用自己；live tests 必须另建一次性 sandbox，避免直接修改真实 repo。
 - `Session` 抽象：用户看到的是一个长期对话，一个 session 可以包含多个 Cursor run。
 - `Run` 抽象：一次提交给 Cursor agent 的 prompt，必须归属于某个 session。
 - 异步 run lifecycle：提交 prompt 后立即返回，server 在后台运行 Cursor。
 - Server-Sent Events：用于实时更新，并带单调递增 event id，方便客户端断线后 replay。
 - Cursor SDK streaming 集成，优先使用 `run.stream()`，必要时使用 `onDelta`。
-- Best-effort tool rendering：tool running 时显示展开的 tool card，完成后压缩为摘要；thinking/activity 与 assistant 正文视觉分开；status text 来自最近活动，而不仅是最终 run state。
+- Best-effort tool rendering：与其它 tool 一样使用可折叠卡片；**reasoning** 由服务端聚合成 **`thinking` synthetic tool**，默认折叠，展开后查看全文；assistant 正文仍为独立气泡。
 - 简单持久化 event log 或 store，刷新页面后不丢当前 conversation timeline。
 - Mock mode 必须走同一套 session/run/event API，不依赖 Cursor 凭证。
 - 测试覆盖作为一等需求：单元测试覆盖 config parsing、request validation、session/run/event storage、event projection、SSE replay、mock gateway event sequence 和 frontend state projection。任何架构改动都要同时更新测试。
@@ -64,7 +64,7 @@ OpenCode 的价值在于 runtime 和 client 分得很清楚：`opencode serve` /
 - 多 provider connector 设计。
 - OpenCode protocol compatibility。
 - 应用层 token auth。Tailscale 是认证边界。
-- 1Password service account 自动取密钥。`.env` 是第一版配置入口。
+- Secrets 写入 `.env`；可选自建脚本用 1Password 等 vault 注入，不作为项目硬依赖。
 - 完整 file explorer 或 terminal/PTY clone。
 - 等价于 OpenCode 的完整 tool approval / permission engine。
 

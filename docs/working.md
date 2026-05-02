@@ -65,11 +65,19 @@
 - 测试：`MarkdownContent.test.tsx` 做单测（强调、标题、GFM 表、空白输入）；`App.test.tsx` 增加 SSE `assistant.delta` 含 ATX 标题与加粗语法时的集成断言（真实 heading + strong DOM）。
 - 侧栏 **CWD** 状态：第一行 `set` / `missing`，第二行展示路径并启用 **`overflow-wrap: anywhere`**、**`word-break: break-word`**；侧栏 **`min-width: 0`**、badge **`max-width: 100%`** 防止长路径溢出。
 - 集成测试与 `App.test.tsx` health mock 覆盖带 `localCwd` 的响应。
-- **Thinking 流式**：`buildTimeline` 按时间排序后对同一 `runId` 的 `thinking.delta` **追加拼接**（不再被 Map 覆盖只留最后一条）；支持 `thinking.completed` 将状态标为 completed。
-- **Tool 卡片**：`tool.started` 与 `tool.completed` **合并**同一 `callId`，完成后仍保留 **args（detail）**；UI 上 **completed/error** 也继续展示 `<pre class="tool-args">`，不再仅在 running 时显示。
+- **Reasoning**：Cursor `thinking` 流在服务端聚合成单次 **`thinking` synthetic tool**，客户端不再订阅 `thinking.delta`；timeline 上以折叠 tool 卡片展示。
+
+- **Tool 卡片**：`tool.started` 与 `tool.completed` **合并**同一 `callId`，完成后仍保留 **args（detail）**；折叠 `<details>` 默认收起，`write_file`/`thinking` 等均在展开区查看参数与结果。
 - **Composer 快捷键**：**Enter** 换行；**⌘↵（Meta+Enter）或 Ctrl+Enter** 发送（与 Send 按钮同一套 `submitRun` 校验）；快捷键说明在 Prompt 标题旁，并用 **`aria-describedby`** 关联到 textarea。
 - **Coverage / `App.test.tsx`**：`vitest` 覆盖率 **`include`** 不再排除 `frontend/src/main.tsx`（入口组件仍主要由挂载集成测试覆盖）。`App.test.tsx` 覆盖：Send、Meta+Enter / Ctrl+Enter 发送、**纯 Enter 不调用 `startSessionRun` 且保留换行**、textarea **`aria-describedby`** 与快捷键文案。
 - **Conversations 侧栏 vs timeline 状态**：在 `frontend/src/main.tsx` 用 `syncSessionRow` 让 `sessions` 列表与选中 session 同事务更新；`sessionStatusFromRunStatus` 对齐 `ProjectionStore`；`submitRun` 乐观 `running`；`run.result` / `run.error` 修正客户端 run 与 session 终端态（缓和漏掉 SSE 或断线时的 stale `activeRun`）。本轮将上述诊断与测试矩阵写回 `docs/rfc.md`、`docs/test.md`。
+
+### 2026-05-03 — public-repo hygiene & reasoning-as-tool
+
+- README / `.env.example`：**不再**预设 `npm run dev:op`（已删除配套脚本条目）；密钥说明以 Cursor dashboard 为主，README 中用**虚构** `op://…` 示例注释「可选外部 secret manager 注入」，非硬依赖。
+- 文档：**去除本机用户名与绝对 workspace 路径**；设计稿件路径改为占位相对路径。
+- **`ThinkingCoalescer`**（`src/server/thinkingFlush.ts`）：流式 reasoning 后端拼完再发一对 `tool.*` events（`name: 'thinking'`）；`src/server/thinkingFlush` 单元测试、`mapCursorStreamMessage` fixture 对齐「mapper 不收 thinking」。
+- 前端时间线为三列骨架，**tool 卡片跨列全宽**，summary row 为三列网格；Vite：`window.__CCR_ROOT__` + `import.meta.hot.dispose` 缓和 HMR duplicate root。
 
 ## Lessons Learned
 

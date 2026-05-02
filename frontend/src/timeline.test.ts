@@ -4,7 +4,7 @@ import type { MessageProjection, RunProjection } from '../../src/shared/projecti
 import { buildTimeline, eventToTimelineItem, flattenJsonForDisplay } from './timeline';
 
 describe('chat timeline projection', () => {
-  it('combines projected messages, run status, thinking, and tool cards in chronological order', () => {
+  it('combines projected messages, run status, synthetic thinking tools, and tool cards in chronological order', () => {
     const messages: MessageProjection[] = [
       message({ id: 'assistant-1', role: 'assistant', content: 'Done.', status: 'completed', createdAt: '2026-05-01T10:00:04.000Z' }),
       message({ id: 'user-1', role: 'user', content: 'Create hello.txt', status: 'completed', createdAt: '2026-05-01T10:00:00.000Z' })
@@ -23,29 +23,51 @@ describe('chat timeline projection', () => {
       }
     ];
     const events: AppEvent[] = [
-      event({ id: 2, type: 'thinking.delta', payload: { text: 'Checking files.' }, createdAt: '2026-05-01T10:00:01.000Z' }),
-      event({ id: 3, type: 'tool.started', payload: { callId: 'tool-1', name: 'write_file', args: { path: 'hello.txt' } }, createdAt: '2026-05-01T10:00:02.000Z' }),
-      event({ id: 4, type: 'tool.completed', payload: { callId: 'tool-1', name: 'write_file', result: 'Wrote hello.txt' }, createdAt: '2026-05-01T10:00:03.000Z' })
+      event({
+        id: 2,
+        type: 'tool.completed',
+        payload: { callId: 'think-1', name: 'thinking', status: 'completed', result: 'Checking files.' },
+        createdAt: '2026-05-01T10:00:01.000Z'
+      }),
+      event({
+        id: 3,
+        type: 'tool.started',
+        payload: { callId: 'tool-1', name: 'write_file', args: { path: 'hello.txt' } },
+        createdAt: '2026-05-01T10:00:02.000Z'
+      }),
+      event({
+        id: 4,
+        type: 'tool.completed',
+        payload: { callId: 'tool-1', name: 'write_file', result: 'Wrote hello.txt' },
+        createdAt: '2026-05-01T10:00:03.000Z'
+      })
     ];
 
     expect(buildTimeline(messages, runs, events)).toMatchObject([
       { kind: 'user', text: 'Create hello.txt', status: 'sent' },
-      { kind: 'thinking', text: 'Checking files.' },
+      { kind: 'tool', name: 'thinking', status: 'completed', summary: 'Checking files.' },
       { kind: 'tool', name: 'write_file', status: 'completed', summary: 'Wrote hello.txt', detail: { path: 'hello.txt' } },
       { kind: 'assistant', text: 'Done.', status: 'completed' },
       { kind: 'status', text: 'Run run-1234…abcdef is completed', tone: 'success' }
     ]);
   });
 
-  it('appends successive thinking.delta chunks for the same run', () => {
+  it('projects a coalesced thinking tool completion', () => {
     const events: AppEvent[] = [
-      event({ id: 1, type: 'thinking.delta', payload: { text: 'Step A. ' }, createdAt: '2026-05-01T10:00:01.000Z' }),
-      event({ id: 2, type: 'thinking.delta', payload: { text: 'Step B.' }, createdAt: '2026-05-01T10:00:02.000Z' }),
-      event({ id: 3, type: 'thinking.completed', payload: {}, createdAt: '2026-05-01T10:00:03.000Z' })
+      event({
+        id: 1,
+        type: 'tool.completed',
+        payload: { callId: 'thinking-run-x-1', name: 'thinking', status: 'completed', result: 'Step A. Step B.' },
+        createdAt: '2026-05-01T10:00:03.000Z'
+      })
     ];
-    const timeline = buildTimeline([], [], events);
-    const thinking = timeline.find((item) => item.kind === 'thinking');
-    expect(thinking).toMatchObject({ kind: 'thinking', text: 'Step A. Step B.', status: 'completed' });
+    const thinkingTool = buildTimeline([], [], events).find((item) => item.kind === 'tool');
+    expect(thinkingTool).toMatchObject({
+      kind: 'tool',
+      name: 'thinking',
+      status: 'completed',
+      summary: 'Step A. Step B.'
+    });
   });
 
   it('merges tool.started args into tool.completed so detail survives completion', () => {
@@ -80,7 +102,7 @@ describe('chat timeline projection', () => {
     ).toBeUndefined();
   });
 
-  it('eventToTimelineItem ignores streaming thinking and tool events (merged in buildTimeline)', () => {
+  it('eventToTimelineItem ignores legacy thinking deltas and streaming tool stubs (merge handles tools)', () => {
     expect(eventToTimelineItem(event({ id: 1, type: 'thinking.delta', payload: { text: '   ' } }))).toBeUndefined();
     expect(eventToTimelineItem(event({ id: 2, type: 'thinking.delta', payload: { text: 'x' } }))).toBeUndefined();
     expect(

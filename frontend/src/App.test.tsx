@@ -74,15 +74,33 @@ describe('App chat client', () => {
 
     act(() => {
       MockEventSource.latest().emit(event({ id: 2, type: 'run.status', payload: runStatusPayload('running'), createdAt: '2026-05-01T12:00:01.000Z' }));
-      MockEventSource.latest().emit(event({ id: 3, type: 'thinking.delta', payload: { text: 'Inspecting workspace.' }, createdAt: '2026-05-01T12:00:02.000Z' }));
-      MockEventSource.latest().emit(event({ id: 4, type: 'tool.started', payload: { callId: 'tool-1', name: 'write_file', args: { path: 'hello.txt' } }, createdAt: '2026-05-01T12:00:03.000Z' }));
-      MockEventSource.latest().emit(event({ id: 5, type: 'tool.completed', payload: { callId: 'tool-1', name: 'write_file', result: 'Wrote hello.txt' }, createdAt: '2026-05-01T12:00:04.000Z' }));
-      MockEventSource.latest().emit(event({ id: 6, type: 'assistant.delta', payload: { text: 'Created hello.txt.' }, createdAt: '2026-05-01T12:00:05.000Z' }));
-      MockEventSource.latest().emit(event({ id: 7, type: 'run.result', payload: { resultText: 'Created hello.txt.' }, createdAt: '2026-05-01T12:00:06.000Z' }));
+      MockEventSource.latest().emit(
+        event({
+          id: 3,
+          type: 'tool.started',
+          payload: { callId: 'think-1', name: 'thinking', status: 'running' },
+          createdAt: '2026-05-01T12:00:02.000Z'
+        })
+      );
+      MockEventSource.latest().emit(
+        event({
+          id: 4,
+          type: 'tool.completed',
+          payload: { callId: 'think-1', name: 'thinking', status: 'completed', result: 'Inspecting workspace.' },
+          createdAt: '2026-05-01T12:00:02.010Z'
+        })
+      );
+      MockEventSource.latest().emit(event({ id: 5, type: 'tool.started', payload: { callId: 'tool-1', name: 'write_file', args: { path: 'hello.txt' } }, createdAt: '2026-05-01T12:00:03.000Z' }));
+      MockEventSource.latest().emit(event({ id: 6, type: 'tool.completed', payload: { callId: 'tool-1', name: 'write_file', result: 'Wrote hello.txt' }, createdAt: '2026-05-01T12:00:04.000Z' }));
+      MockEventSource.latest().emit(event({ id: 7, type: 'assistant.delta', payload: { text: 'Created hello.txt.' }, createdAt: '2026-05-01T12:00:05.000Z' }));
+      MockEventSource.latest().emit(event({ id: 8, type: 'run.result', payload: { resultText: 'Created hello.txt.' }, createdAt: '2026-05-01T12:00:06.000Z' }));
     });
 
-    expect(await screen.findByText(/Thinking · streaming ·/)).toBeTruthy();
-    expect(screen.getByText('Inspecting workspace.')).toBeTruthy();
+    expect(await screen.findByText(/^Thinking$/)).toBeTruthy();
+    const thinkingRow = screen.getByText(/^Thinking$/).closest('details') as HTMLDetailsElement | null;
+    expect(thinkingRow).toBeTruthy();
+    expect(thinkingRow!.open).toBe(false);
+    expect(within(thinkingRow as HTMLElement).getByText('Inspecting workspace.')).toBeTruthy();
     const toolDetails = screen.getByText('write_file').closest('details') as HTMLDetailsElement | null;
     expect(toolDetails).toBeTruthy();
     expect(toolDetails!.open).toBe(false);

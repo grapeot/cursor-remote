@@ -2,7 +2,7 @@
 
 ## Context
 
-本轮 review 基于当前 POC UI 的 Playwright 截图和 accessibility snapshot。截图文件在本机工作区：`/Users/grapeot/co/knowledge_working/cursor-remote-current-ui.png`。当前界面是单列 980px 居中 layout：hero、status panel、prompt form、runs list。它已经能表达产品逻辑，但视觉气质仍然像内部 POC。
+本轮 review 基于当前 POC UI 的 Playwright 截图和 accessibility snapshot。示例相对路径：`./docs/assets/ui-reference.png`（将截图置于仓库内任意一致路径即可）。当前界面是单列 980px 居中 layout：hero、status panel、prompt form、runs list。它已经能表达产品逻辑，但视觉气质仍然像内部 POC。
 
 目标不是做一个花哨的消费级界面，而是做一个精密、安静、可信的 developer console。这个产品会远程控制 Cursor agent 修改代码，UI 的职责是让用户感到系统可控、状态清楚、每个动作都有反馈。
 

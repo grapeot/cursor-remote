@@ -1,11 +1,10 @@
 /**
  * One-shot local SDK smoke test: writes mvp_sandbox/hello_world.py under CURSOR_LOCAL_CWD.
  *
- * Prefer (1Password key reference in .env):
- *   npm run mvp:run
+ * Requires CURSOR_API_KEY (and local cwd for local runtime) in the environment —
+ * typically via `.env` in the repo root (loaded by dotenv below).
  *
- * Or plain env already exported:
- *   npm run mvp:run:plain
+ * Run: npm run mvp:run
  */
 import 'dotenv/config';
 import { loadConfig } from '../src/server/config.js';

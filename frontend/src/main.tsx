@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactElement, SyntheticEvent } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 import type { HealthResponse } from '../../src/shared/contracts';
 import {
   appEventSchema,
@@ -32,6 +32,13 @@ import {
 import { buildTimeline, flattenJsonForDisplay, shortRunId } from './timeline';
 import type { TimelineItem } from './timeline';
 import './styles.css';
+
+declare global {
+  interface Window {
+    /** HMR-stable React root handle (avoids duplicate createRoot warnings under Vite HMR). */
+    __CCR_ROOT__?: Root;
+  }
+}
 
 const MVP_PYTHON_HELLO_PROMPT = `In this repo, create or overwrite the file mvp_sandbox/hello_world.py with exactly:
 
@@ -488,7 +495,7 @@ export function App() {
           {timelineItems.length === 0 ? (
             <div className="chat-empty">
               <h3>Start a Cursor conversation</h3>
-              <p>Send a task below. Cursor will work in the configured local cwd and stream assistant text, thinking, tools, and status here.</p>
+              <p>Send a task below. Cursor will work in the configured local cwd and stream assistant text, tool activity (including batched Thinking), and status here.</p>
               {showSmokeActions ? (
                 <button type="button" className="outline" disabled={activeRun !== undefined} onClick={() => setPrompt(MVP_PYTHON_HELLO_PROMPT)}>
                   Fill Python hello world prompt
@@ -543,7 +550,7 @@ export function App() {
 
 const TIMELINE_EVENT_BUFFER_MAX = 500;
 
-/** Heartbeat / deltas already reflected elsewhere would only bloat this buffer and evict thinking/tool/task rows via .slice — drop them client-side (still receive SSE keepalive). */
+/** Heartbeat / deltas already reflected elsewhere would only bloat this buffer and evict tool/task rows via .slice — drop them client-side (still receive SSE keepalive). */
 function shouldRetainClientRunEvent(event: AppEvent): boolean {
   return event.type !== 'heartbeat' && event.type !== 'tool.delta' && event.type !== 'assistant.delta';
 }
@@ -579,20 +586,6 @@ function TimelineItemView({ item }: { item: TimelineItem }): ReactElement | null
       </article>
     );
   }
-  if (item.kind === 'thinking') {
-    if (item.text.trim().length === 0 && item.status !== 'streaming') {
-      return null;
-    }
-    return (
-      <article className="timeline-item thinking-item">
-        <div className="timeline-label">
-          {item.status === 'streaming' ? <span className="streaming-dot" aria-hidden="true" /> : null}
-          Thinking · {item.status} · {formatTimelineTime(item.createdAt)}
-        </div>
-        <p>{item.text.trim().length > 0 ? item.text : '\u00a0'}</p>
-      </article>
-    );
-  }
   if (item.kind === 'tool') {
     return <ToolTimelineCard item={item} />;
   }
@@ -606,17 +599,22 @@ function TimelineItemView({ item }: { item: TimelineItem }): ReactElement | null
   );
 }
 
-/** Tool invocation: collapsible card; summary shows Cursor tool name only, body shows flattened args + result text. */
+function toolTimelineLabel(toolName: string): string {
+  return toolName === 'thinking' ? 'Thinking' : toolName;
+}
+
+/** Tool invocation: collapsible card; summary is a compact 3-column row; expanded body shows flattened args + result text. */
 function ToolTimelineCard({ item }: { item: Extract<TimelineItem, { kind: 'tool' }> }) {
   const kvLines = item.detail !== undefined ? flattenJsonForDisplay(item.detail) : [];
+  const label = toolTimelineLabel(item.name);
   return (
-    <article className={`timeline-item tool-item tool-card tool-${item.status}`}>
+    <article className={`timeline-item tool-item tool-card tool-span-full tool-${item.status}`}>
       <details className="tool-card-details">
-        <summary className="tool-card-summary" aria-label={`${item.name} (${item.status})`}>
+        <summary className="tool-card-summary" aria-label={`${label} (${item.status})`}>
           <span className="tool-card-icon" aria-hidden="true">
             {item.status === 'running' ? '●' : item.status === 'error' ? '!' : '✓'}
           </span>
-          <span className="tool-card-type">{item.name}</span>
+          <span className="tool-card-type">{label}</span>
           <span className="tool-status">{item.status}</span>
         </summary>
         <div className="tool-card-body">
@@ -705,8 +703,6 @@ function getSubscribedEventTypes(): string[] {
   return [
     'run.status',
     'assistant.delta',
-    'thinking.delta',
-    'thinking.completed',
     'tool.started',
     'tool.delta',
     'tool.completed',
@@ -801,6 +797,15 @@ function completeAssistantMessage(currentMessages: MessageProjection[], event: A
 
 const rootElement = document.getElementById('root');
 if (rootElement !== null) {
-  const root = createRoot(rootElement);
+  let root = window.__CCR_ROOT__;
+  if (!root) {
+    root = createRoot(rootElement);
+    window.__CCR_ROOT__ = root;
+  }
   root.render(<App />);
 }
+
+import.meta.hot?.dispose(() => {
+  window.__CCR_ROOT__?.unmount();
+  window.__CCR_ROOT__ = undefined;
+});

@@ -49,15 +49,11 @@ describe('CursorStreamMapper', () => {
     expect(expired[0]?.payload).toMatchObject({ runId: 'run-test', status: 'failed' });
   });
 
-  it('maps thinking, tool_call, task, and request messages', () => {
-    expect(mapCursorStreamMessage({ type: 'thinking', text: 'Thinking', thinking_duration_ms: 120 }, context)).toEqual([
-      {
-        type: 'thinking.delta',
-        payload: { text: 'Thinking', thinkingDurationMs: 120 },
-        cursorEventType: 'thinking'
-      }
-    ]);
+  it('drops raw thinking stream envelopes (gateway coalesces them into thinking tool events)', () => {
+    expect(mapCursorStreamMessage({ type: 'thinking', text: 'Thinking', thinking_duration_ms: 120 }, context)).toEqual([]);
+  });
 
+  it('maps tool_call, task, and request messages', () => {
     expect(
       mapCursorStreamMessage(
         { type: 'tool_call', call_id: 'call-1', name: 'write', status: 'completed', result: { ok: true } },

@@ -23,6 +23,7 @@ This project is a technical validation for a Cursor Cloud SDK remote-control sty
 
 ## Commands
 
+- **Running tests**: `npm test` / `vitest` only spin up ephemeral HTTP listeners (`listen(0)` inside test files). Do **not** start `npm run dev`, `npm run dev:server`, or `npm run dev:frontend` before tests; the engineer may already be using `:8787` / `:5173` / `:5177` manually, and parallel dev servers cause confusion even when ports differ.
 - Install dependencies: `npm install`
 - Development: `npm run dev`
 - Backend only: `npm run dev:server`

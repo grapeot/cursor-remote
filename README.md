@@ -9,21 +9,32 @@ The default mode is mock mode, so the app is runnable before a Cursor API key is
 ```bash
 npm install
 cp .env.example .env
+# Edit .env: set CURSOR_API_KEY from Cursor account / developer settings (see below).
 npm run dev
 ```
 
 Open `http://localhost:5177`. The backend listens on `http://localhost:8787`.
 
-### Cursor API key via 1Password CLI
+### API key
 
-If `CURSOR_API_KEY` in `.env` is a secret reference (for example `op://dev/dev-api-keys/cursor_api_key`), start with **`npm run dev:op`** or **`./scripts/dev-op.sh`** so `op run` resolves it before `npm run dev`. Plain `npm run dev` would leave the literal `op://…` string in the environment.
+1. Create or obtain a **Cursor API key** from Cursor’s account / developer settings.
+2. Put it in `.env` as `CURSOR_API_KEY=…` (plaintext is fine for local dev).
+
+Optional: store the secret in **1Password** (or another manager) and inject it when you launch Node. Example only — vault and item names are fictional:
+
+```bash
+# Illustration: substitute your own vault/item path and CLI.
+CURSOR_API_KEY="op://AcmeCorp Dev Vault/Example Item/api_token" npm run dev
+```
+
+If you are not using a secret manager, you do not need that step; just paste the API key into `.env`.
 
 ### Minimal MVP (Python hello world)
 
-1. Set `CURSOR_RUNTIME=local` and `CURSOR_LOCAL_CWD` to the **absolute path of this project root** (the folder that contains `mvp_sandbox/`).
-2. Configure `CURSOR_API_KEY` (plaintext or `op://…` reference).
-3. Start the stack (`npm run dev:op` if the key uses 1Password references).
-4. In the UI click **Run MVP: Python hello world**, or edit the prompt and use **Start Cursor run**. The backend queues the run immediately and streams app events back to the browser over SSE.
+1. Set `CURSOR_RUNTIME=local` and `CURSOR_LOCAL_CWD=.` (repo root — the folder that contains `mvp_sandbox/`), or another path relative to where you start the backend.
+2. Ensure `CURSOR_API_KEY` is set in `.env`.
+3. Start the stack with `npm run dev`.
+4. In the UI, use **Fill Python hello world prompt** / **Use smoke prompt** (mock mode), or paste your task and **Send**.
 5. Confirm the file exists and runs: `python3 mvp_sandbox/hello_world.py` → `Hello, world!`
 
 CLI shortcut (same SDK path as the server, no browser):
@@ -32,31 +43,23 @@ CLI shortcut (same SDK path as the server, no browser):
 npm run mvp:run
 ```
 
-Uses `op run` when `CURSOR_API_KEY` in `.env` is an `op://` reference. Plain key already in the environment: `npm run mvp:run:plain`.
+Loads `.env` via `dotenv` (see `scripts/run_mvp_once.ts`).
 
 ## Real local Cursor SDK validation
 
-This is the main path for the remote-control product idea. The Node backend runs on the same machine that has your code checkout, so Cursor SDK can access local files through `CURSOR_LOCAL_CWD`.
+The Node backend runs on the machine that holds your checkout, so Cursor SDK can access local files through `CURSOR_LOCAL_CWD`.
 
-1. Create or obtain a Cursor API key from Cursor's account / developer settings.
-2. Put it in `.env` as `CURSOR_API_KEY=...`.
-3. Set `CURSOR_RUNTIME=local`.
-4. Set `CURSOR_LOCAL_CWD=/absolute/path/to/your/repo`.
-5. Restart `npm run dev` and submit a prompt.
+1. Set `CURSOR_API_KEY`, `CURSOR_RUNTIME=local`, and `CURSOR_LOCAL_CWD` (`.` or another directory).
+2. Restart `npm run dev` and submit a prompt.
 
-The browser or phone talks only to this backend. If you want to access it from outside your LAN, expose this backend through your own secure tunnel or HTTPS endpoint, not by putting the Cursor key in the client.
+The browser only talks to this backend. If you expose it beyond localhost, use your own tunnel or VPN (for example Tailscale); do not put the Cursor key in the client.
 
 ## Real cloud Cursor SDK validation
 
-Cloud mode is still useful as a comparison path, but it is not the primary validation for local-file remote control.
+Comparison path — not primary for local-file remote control.
 
-1. Create or obtain a Cursor API key from Cursor's account / developer settings.
-2. Put it in `.env` as `CURSOR_API_KEY=...`.
-3. Set `CURSOR_RUNTIME=cloud`.
-4. Set `CURSOR_DEFAULT_REPO_URL=https://github.com/<owner>/<repo>`.
-5. Restart `npm run dev` and submit a prompt.
-
-The frontend never receives the Cursor API key. It only talks to this project's local `/api/*` endpoints.
+1. Set `CURSOR_RUNTIME=cloud` and `CURSOR_DEFAULT_REPO_URL=https://github.com/<owner>/<repo>`.
+2. Restart `npm run dev` and submit a prompt.
 
 ## Commands
 
