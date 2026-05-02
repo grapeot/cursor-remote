@@ -72,6 +72,14 @@ describe('chat timeline projection', () => {
     });
   });
 
+  it('eventToTimelineItem ignores task.updated with only whitespace text', () => {
+    expect(
+      eventToTimelineItem(
+        event({ id: 1, type: 'task.updated', payload: { text: '   ', status: '' }, createdAt: '2026-05-01T10:00:01.000Z' })
+      )
+    ).toBeUndefined();
+  });
+
   it('eventToTimelineItem ignores streaming thinking and tool events (merged in buildTimeline)', () => {
     expect(eventToTimelineItem(event({ id: 1, type: 'thinking.delta', payload: { text: '   ' } }))).toBeUndefined();
     expect(eventToTimelineItem(event({ id: 2, type: 'thinking.delta', payload: { text: 'x' } }))).toBeUndefined();

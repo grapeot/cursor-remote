@@ -281,6 +281,18 @@ Local 是目标产品路径。Backend 跑在用户 Mac 或 LA 机器上，并把
 
 Diff、file change 和 result review 不进入当前 Stage 1。当前阶段只要求远程 prompt、真实 Cursor local execution、app-level stream mapping、SSE delivery 和 session projection 跑通。后续如果 UI 需要 code review 面板，再独立设计本地 git baseline 和 diff summary；它不阻塞 Cursor remote-control MVP。
 
+## Stage 2：Prompt 队列（对标 Cursor IDE）
+
+原生 Cursor 在 agent 执行任务时会占用输入能力（界面常表现为类似 *running*、不可并行提交），桌面端另有 **prompt queue**：用户可把后续指令排入队列（而非丢失草稿），并可 **排序、编辑、删除** 某项；**立即发送（Send now）** 的预期语义是先 **中止当前编排 / stop 活跃 run（以 Cursor SDK 可用 cancel/stop 为准）**，再以队列中选中的文案发起一轮新的提交；若在某一阶段无法实现可靠 cancel，则产品需退化为「仅排队直至当前 run 自然结束」，并在 UI 上分清楚两种模式。
+
+产品与协议占位要点：
+
+- **客户端**：会话级有序队列（可为 FIFO 或可拖拽）；项含草稿正文、可选 `modelId` 覆盖、插入时间戳；是否与 server 对齐 id 以利于多客户端由 Stage 2 实施方案决定。
+- **与 Stage 1 的关系**：Stage 1 仍推荐「同一时间单 session 单一 active run + active 期间禁用直接 Send」，Stage 2 用「enqueue / 队列 UI」接住用户意图，而不是在长 run 期间完全锁死表达式。
+- **API 占位**：可演进为例如 `POST/GET/PATCH/DELETE /api/sessions/:sessionId/queue`、或扩展 `POST …/runs` 接受 dequeue / send-now flag；细则与 Stage 2 的 cancel 能力同步锁定。
+
+本节与 PRD Stage 2 中的「prompt 队列」条目一致。
+
 ## Auth 与暴露边界
 
 Stage 1/2 都不做应用层 token auth。目标部署方式是 Tailscale：server 监听在 localhost、LAN IP 或 Tailscale IP，只有 tailnet 内设备可以访问。这样做的好处是边界清楚：网络身份、设备授权和 ACL 由 Tailscale 管；应用代码专注 Cursor session lifecycle。
@@ -341,7 +353,7 @@ The timeline rendering rules:
 - Tool calls render as cards. Running cards stay expanded and prominent; completed cards collapse to a one-line summary with name/status; error cards use error color.
 - Run status renders as human-readable text: `Queued`, `Running`, `Completed`, `Failed`, `Cancelled`.
 - Raw event stream can exist behind a debug disclosure later, but it is not part of default Stage 1 UI.
-- The composer is session-scoped. Starting a run appends a user message and disables overlapping sends until the active run reaches a terminal status.
+- The composer is session-scoped. Starting a run appends a user message and disables overlapping sends until the active run reaches a terminal status (**Stage 2**：改为可同时 **enqueue** prompts，参见上文「Prompt 队列」）。
 
 ### Cursor UI projection model
 

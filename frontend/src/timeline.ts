@@ -157,7 +157,8 @@ function mergeEventIntoTimeline(items: Map<string, TimelineItem>, event: AppEven
 
 export function eventToTimelineItem(event: AppEvent): TimelineItem | undefined {
   if (event.type === 'task.updated') {
-    const text = readStringField(event.payload, 'text') ?? readStringField(event.payload, 'status');
+    const raw = readStringField(event.payload, 'text') ?? readStringField(event.payload, 'status');
+    const text = raw?.trim();
     return text
       ? {
           kind: 'status',

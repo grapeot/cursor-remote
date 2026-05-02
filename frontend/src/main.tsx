@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent, ReactElement, SyntheticEvent } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { KeyboardEvent, SyntheticEvent } from 'react';
 import type { HealthResponse } from '../../src/shared/contracts';
 import {
   appEventSchema,
@@ -256,7 +256,7 @@ export function App() {
   }
 
   function applyRunEvent(event: AppEvent): void {
-    setEvents((currentEvents) => [...currentEvents, event].slice(-80));
+    setEvents((currentEvents) => appendTimelineEvents(currentEvents, event));
     const payload = event.payload;
     if (event.type === 'run.status' && isRunStatusPayload(payload)) {
       setRuns((currentRuns) =>
@@ -405,7 +405,7 @@ export function App() {
               ) : null}
             </div>
           ) : (
-            timelineItems.map((item) => <TimelineItemView key={item.id} item={item} />)
+            timelineItems.map((item) => <TimelineItemView key={`${item.kind}-${item.id}`} item={item} />)
           )}
         </div>
 
@@ -450,7 +450,21 @@ export function App() {
   );
 }
 
-function TimelineItemView({ item }: { item: TimelineItem }) {
+const TIMELINE_EVENT_BUFFER_MAX = 500;
+
+/** Heartbeat / deltas already reflected elsewhere would only bloat this buffer and evict thinking/tool/task rows via .slice — drop them client-side (still receive SSE keepalive). */
+function shouldRetainClientRunEvent(event: AppEvent): boolean {
+  return event.type !== 'heartbeat' && event.type !== 'tool.delta' && event.type !== 'assistant.delta';
+}
+
+function appendTimelineEvents(currentEvents: AppEvent[], event: AppEvent): AppEvent[] {
+  if (!shouldRetainClientRunEvent(event)) {
+    return currentEvents;
+  }
+  return [...currentEvents, event].slice(-TIMELINE_EVENT_BUFFER_MAX);
+}
+
+function TimelineItemView({ item }: { item: TimelineItem }): ReactElement | null {
   if (item.kind === 'user') {
     return (
       <article className="timeline-item user-item">
@@ -460,29 +474,39 @@ function TimelineItemView({ item }: { item: TimelineItem }) {
     );
   }
   if (item.kind === 'assistant') {
+    const trimmed = item.text.trim();
+    if (trimmed.length === 0 && item.status !== 'streaming') {
+      return null;
+    }
     return (
       <article className={`timeline-item assistant-item assistant-${item.status}`}>
         <div className="timeline-label">
           {item.status === 'streaming' ? <span className="streaming-dot" aria-hidden="true" /> : null}
           Cursor · {item.status} · {formatTimelineTime(item.createdAt)}
         </div>
-        <MarkdownContent markdown={item.text} />
+        {trimmed.length > 0 ? <MarkdownContent markdown={item.text} /> : <p className="muted markdown-body markdown-body--streaming">Receiving…</p>}
       </article>
     );
   }
   if (item.kind === 'thinking') {
+    if (item.text.trim().length === 0 && item.status !== 'streaming') {
+      return null;
+    }
     return (
       <article className="timeline-item thinking-item">
         <div className="timeline-label">
           {item.status === 'streaming' ? <span className="streaming-dot" aria-hidden="true" /> : null}
           Thinking · {item.status} · {formatTimelineTime(item.createdAt)}
         </div>
-        <p>{item.text}</p>
+        <p>{item.text.trim().length > 0 ? item.text : '\u00a0'}</p>
       </article>
     );
   }
   if (item.kind === 'tool') {
     return <ToolTimelineCard item={item} />;
+  }
+  if (item.text.trim().length === 0) {
+    return null;
   }
   return (
     <article className={`timeline-item status-item status-${item.tone}`}>
@@ -632,7 +656,7 @@ function upsertSession(currentSessions: SessionProjection[], nextSession: Sessio
 
 function createOptimisticUserMessage(sessionId: string, runId: string, content: string, createdAt: string): MessageProjection {
   return {
-    id: `optimistic-user-${runId}`,
+    id: `${runId}-user`,
     sessionId,
     runId,
     role: 'user',
@@ -645,12 +669,19 @@ function createOptimisticUserMessage(sessionId: string, runId: string, content: 
 
 function appendAssistantDelta(currentMessages: MessageProjection[], event: AppEvent, text: string): MessageProjection[] {
   const runId = event.runId;
+  if (runId === undefined) {
+    return currentMessages;
+  }
+  if (text.length === 0) {
+    return currentMessages;
+  }
+  const assistantId = `${runId}-assistant`;
   const existingMessage = currentMessages.find((message) => message.role === 'assistant' && message.runId === runId);
   if (existingMessage === undefined) {
     const message: MessageProjection = {
-      id: `streaming-assistant-${runId ?? event.id}`,
+      id: assistantId,
       sessionId: event.sessionId,
-      ...(runId !== undefined ? { runId } : {}),
+      runId,
       role: 'assistant',
       content: text,
       status: 'streaming',
@@ -665,11 +696,16 @@ function appendAssistantDelta(currentMessages: MessageProjection[], event: AppEv
 }
 
 function completeAssistantMessage(currentMessages: MessageProjection[], event: AppEvent): MessageProjection[] {
-  return currentMessages.map((message) =>
-    message.role === 'assistant' && message.runId === event.runId
-      ? { ...message, status: 'completed', updatedAt: event.createdAt }
-      : message
-  );
+  if (event.runId === undefined) {
+    return currentMessages;
+  }
+  const assistantId = `${event.runId}-assistant`;
+  return currentMessages.map((message) => {
+    if (message.role !== 'assistant' || message.runId !== event.runId) {
+      return message;
+    }
+    return { ...message, id: assistantId, status: 'completed', updatedAt: event.createdAt };
+  });
 }
 
 const rootElement = document.getElementById('root');

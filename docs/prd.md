@@ -49,6 +49,7 @@ OpenCode 的价值在于 runtime 和 client 分得很清楚：`opencode serve` /
 
 ### Stage 2
 
+- **Prompt 队列（对齐 Cursor IDE）**：在 agent 忙于当前 run（对应界面上 *running* / 不可用输入）时，用户仍可将后续任务加入 **queue**：支持排序、编辑队列项正文、删除、以及 **立刻发送**。立刻发送的预期语义是：**先停止当前活跃 run（以 Cursor SDK 可用的 cancel/stop 为准）**，再以队列中选中的内容发起一次新的 run；若 Stage 2 暂不实现可靠的 cancel，则「立刻发送」仅表示「排到队首并在当前 run 结束后自动发送」（产品文案需区分）。
 - Parallel sub-agent / multi-run session，用 `RunGroup` 或同一 session 下多个 concurrent runs 表达。
 - 可选 local diff review UI，包括文件级 diff、按 run 分组的 changed files、结果摘要和可复制 patch。这个能力不阻塞 Stage 1。
 - server 重启后的 resume，基于持久化的 `cursorAgentId`、event log 和可用的 SDK `Agent.resume()`。App-level replay 是必需能力，SDK-level resume 是增强能力。
