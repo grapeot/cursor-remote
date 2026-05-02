@@ -22,8 +22,8 @@ Node/Express server
   ├── CursorAgentGateway: @cursor/sdk adapter
   ├── EventStore: append-only events with monotonic ids
   ├── EventBroker: SSE fan-out and replay
-  ├── DiffService: local git baseline and diff summary
-  └── TestHarness: mock gateway, SSE client, live sandbox
+  ├── CursorStreamMapper: Cursor SDK messages to app events
+  └── TestHarness: mock gateway, SSE client, live sandbox cwd
 
 @cursor/sdk
   ├── Agent.create({ local: { cwd } })
@@ -78,15 +78,6 @@ interface Run {
   completedAt?: string;
   resultText?: string;
   error?: string;
-  diffSummary?: DiffSummary;
-}
-
-interface DiffSummary {
-  baselineRef?: string;
-  changedFiles: string[];
-  insertions?: number;
-  deletions?: number;
-  summaryText?: string;
 }
 ```
 
@@ -124,8 +115,6 @@ type AppEventType =
   | 'tool.completed'
   | 'tool.error'
   | 'task.updated'
-  | 'file.changed'
-  | 'diff.snapshot'
   | 'run.result'
   | 'run.error'
   | 'heartbeat';
@@ -211,27 +200,61 @@ SSE response 规则：
 - server 每 10 秒发送 heartbeat event
 - 如果请求带 `Last-Event-ID`，先 replay 已存储且 id 更大的 events，再 tail live events
 
-## Cursor stream 映射
+## CursorStreamMapper
+
+`CursorStreamMapper` 是 SDK 边界的唯一翻译层。它接收 `run.stream()` 产出的 `SDKMessage`，加上 app run context，然后输出零个或多个 `RawCursorEvent`。Route、RunService 和前端都不直接理解 Cursor SDK 的 raw event shape。
+
+```ts
+interface CursorStreamContext {
+  runId: string;
+  prompt: string;
+  runtime: 'mock' | 'local';
+  modelId: string;
+}
+
+interface RawCursorEvent {
+  type: AppEventType;
+  payload: unknown;
+  cursorEventType?: string;
+  cursorEventId?: string;
+}
+```
 
 `@cursor/sdk` 暴露两层有用的 stream：
 
 1. `run.stream()` 产出 `SDKMessage` events，例如 `assistant`、`thinking`、`tool_call`、`status`、`task`、`request`。
 2. `agent.send(..., { onDelta, onStep })` 可以暴露更细粒度的 updates，例如 `text-delta`、`thinking-delta`、`tool-call-started`、`tool-call-completed`、`shell-output-delta` 和 token usage。
 
-Stage 1 先使用 `run.stream()`，因为 event envelope 有文档且足够简单。如果文本更新粒度太粗，再用 `onDelta` 生成 `assistant.delta` 和 `thinking.delta`。
+Stage 1 使用 `run.stream()`，因为 event envelope 在 `@cursor/sdk@1.0.9` 类型里清楚：`system`、`user`、`assistant`、`tool_call`、`thinking`、`status`、`request`、`task`。如果后续文本更新粒度不够，再把 `agent.send(..., { onDelta })` 作为补充来源，但仍然通过同一个 mapper 输出 app events。
 
 推荐映射：
 
 | Cursor event | App event | UI 用途 |
 |---|---|---|
-| `status` | `run.status` | status pill / activity row |
-| `assistant` text block | `assistant.delta` 或 assistant message update | chat text |
-| `thinking` | `thinking.delta` / `thinking.completed` | 可折叠 activity/reasoning 区域 |
-| `tool_call` running | `tool.started` | tool card 展开 |
-| `tool_call` completed | `tool.completed` | tool card 收起或完成态 |
-| `tool_call` error | `tool.error` | tool card error state |
-| `task` | `task.updated` | 高层 activity row |
-| run final result | `run.result` | final assistant message + run summary |
+| Cursor `SDKMessage` | App event | Payload contract |
+|---|---|---|
+| `status: CREATING/RUNNING` | `run.status` | `{ runId, prompt, runtime, modelId, status: 'running' }` |
+| `status: FINISHED` | `run.status` | same envelope with `status: 'completed'` |
+| `status: ERROR/EXPIRED` | `run.status` | same envelope with `status: 'failed'` |
+| `status: CANCELLED` | `run.status` | same envelope with `status: 'cancelled'` |
+| `assistant.message.content[].type === 'text'` | `assistant.delta` | `{ text }` for each non-empty text block |
+| `assistant.message.content[].type === 'tool_use'` | `tool.started` | `{ callId, name, status: 'running', args }` |
+| `thinking` | `thinking.delta` | `{ text, thinkingDurationMs? }` |
+| `tool_call: running` | `tool.started` | `{ callId, name, status, args?, truncated? }` |
+| `tool_call: completed` | `tool.completed` | `{ callId, name, status, result?, truncated? }` |
+| `tool_call: error` | `tool.error` | `{ callId, name, status, result?, truncated? }` |
+| `task` | `task.updated` | `{ status?, text? }` |
+| `request` | `task.updated` | `{ requestId, status: 'request' }` until approval UX exists |
+| `system` / `user` | no event by default | Already represented by session/run state or user message projection |
+| unknown shape | `task.updated` | `{ status: 'unknown_cursor_event', rawType? }` for diagnostics |
+
+Mapper rules:
+
+- It must be a pure function. No I/O, no clock, no EventStore access.
+- It may return multiple app events for one Cursor message, especially assistant messages with multiple text/tool blocks.
+- It must never throw on unknown SDK shapes. Unknown or malformed input becomes a diagnostic `task.updated` event.
+- It must not expose credentials. Raw Cursor payloads can be retained only where they are SDK message content; environment, headers and API keys are never part of mapper input.
+- Terminal `run.result` still comes from `run.wait()`, not from stream messages. `run.stream()` provides progress; `run.wait()` provides final result text and terminal status.
 
 不要把 Cursor tool `args` / `result` payload 当作稳定 schema。稳定的是 `type`、`call_id`、`name` 和 `status` 这层 envelope；细节 payload 只做 best-effort 展示。
 
@@ -257,9 +280,7 @@ data/
 
 Local 是目标产品路径。Backend 跑在用户 Mac 或 LA 机器上，并把 Cursor SDK 指向 `CURSOR_LOCAL_CWD`。默认 `CURSOR_LOCAL_CWD` 指向本项目 repo 根目录，这样产品成熟后可以用 Cursor remote-control 来修改自己；测试路径必须和产品 cwd 分离。
 
-Diff/result review 应走本地 git。run 开始前记录 baseline git status 或 diff marker。run 完成后计算 changed files 和 diff summary。这个能力应该和 Cursor SDK streaming 分开，即使 Cursor 不返回 file metadata，也能工作。
-
-Stage 1 的 diff 能力可以保持小而确定：run 开始前记录当前 `HEAD` 和 `git status --porcelain`；run 结束后用 `git diff --stat`、`git diff --name-only` 和必要的短 diff 生成 `diff.snapshot`。如果 cwd 不是 git repo，系统发出 `diff.unavailable` 类型的 activity，而不是让 Cursor run 失败。
+Diff、file change 和 result review 不进入当前 Stage 1。当前阶段只要求远程 prompt、真实 Cursor local execution、app-level stream mapping、SSE delivery 和 session projection 跑通。后续如果 UI 需要 code review 面板，再独立设计本地 git baseline 和 diff summary；它不阻塞 Cursor remote-control MVP。
 
 ## Auth 与暴露边界
 
@@ -295,11 +316,11 @@ Visual design follows `docs/design.md`. The frontend should feel like a premium 
 
 ## Evaluation architecture
 
-可测试性要进入接口设计，而不是事后补测试。核心服务必须通过 dependency injection 接收 Cursor gateway、EventStore、Clock、IdGenerator、SandboxCwd 和 DiffProvider。这样同一套 RunService 可以跑三种模式：deterministic mock、recorded event replay、真实 Cursor local sandbox。
+可测试性要进入接口设计，而不是事后补测试。核心服务必须通过 dependency injection 接收 Cursor gateway、EventStore、Clock、IdGenerator 和 sandbox cwd。这样同一套 RunService 可以跑三种模式：deterministic mock、recorded event replay、真实 Cursor local sandbox。
 
 默认 `npm test` 跑 deterministic suite，不访问 Cursor API。它验证 app logic：config、request validation、EventStore、ProjectionStore、Cursor stream mapper、EventBroker/SSE、API routes、DiffService、frontend projection 和 mock gateway event sequence。这里的成功判据是纯客观的：event id 单调、projection 一致、SSE replay 不丢事件、HTTP error code 稳定、secret 不出现在 response 或 event payload。
 
-Live Cursor suite 通过 `RUN_CURSOR_LIVE_TESTS=1` 显式开启，模型固定 `composer-2`。测试创建一次性 local sandbox cwd，并写入 `.cursor/sandbox.json`。Live smoke 不做长任务，只验证 API 是否真的可用：`Cursor.me()` 成功，`composer-2` 可用，`run.stream()` 产生 assistant/tool/status event，Cursor 能在 sandbox 写入 `hello.txt` 或修改 `hello.py`，app SSE 能转发这些 event，run 结束后 DiffService 能看到 changed files。
+Live Cursor suite 通过 `RUN_CURSOR_LIVE_TESTS=1` 显式开启，模型固定 `composer-2`。测试创建一次性 local sandbox cwd。Live smoke 不做长任务，只验证 API 是否真的可用：`run.stream()` 产生 status/assistant 或 tool/task event，Cursor 能在 sandbox 写入 `hello.txt`，app SSE 能转发这些 event，并且 run 进入 completed/failed terminal state。产品默认 cwd 可以指向真实 repo；live tests 必须覆盖 cwd，避免测试误改真实 workspace。
 
 Live suite 的失败输出要服务 agent 自我诊断。测试摘要应能区分 failure layer：token/account、model availability、SDK schema mismatch、stream timeout、SSE broker、diff baseline、projection。这样 agent 可以判断下一步是修本地代码、更新 fixture，还是标记 Cursor API 当前不可用。
 
@@ -307,10 +328,10 @@ Stage 1 测试矩阵：
 
 | 层级 | 默认运行 | 覆盖内容 |
 |---|---|---|
-| Unit | 是 | config、contracts、event store、projection、stream mapper、diff service |
+| Unit | 是 | config、contracts、event store、projection、stream mapper |
 | API integration | 是 | session CRUD、start run、messages、events、error paths、secret masking |
 | SSE harness | 是 | live subscribe、heartbeat、disconnect cleanup、`Last-Event-ID` replay |
-| Frontend projection | 是 | event fixtures 到 timeline/activity/status/diff state |
+| Frontend projection | 是 | event fixtures 到 timeline/activity/status state |
 | Coverage | 手动/CI | remote-control core 主要分支，live tests 不计入 gate |
 | Live Cursor | 否 | `RUN_CURSOR_LIVE_TESTS=1` 时用真实 token、composer-2 和 sandbox cwd 验证 SDK |
 
@@ -320,7 +341,7 @@ Stage 1 测试矩阵：
 - `tool_call.args` 和 `tool_call.result` 不是稳定 payload。
 - `SDKRequestMessage` 表示等待用户输入或审批，但目前证据没有显示稳定的 SDK response method。Permission UX 应留到 Stage 2，等 live validation 证明闭环后再做。
 - `Agent.resume()` 恢复的是 agent，不一定是被中断的 run。App-level event replay 仍然必须实现。
-- Local runtime 没有 cloud artifacts；local diff review 必须依赖本地 git integration。
+- Local runtime 没有 cloud artifacts；如果后续要做 diff review，应独立依赖本地 git integration，而不是假设 Cursor stream 提供稳定文件变更元数据。
 - Tailscale 认证简化了应用代码，但 tailnet 内设备默认可信。UI 需要降低误操作概率，特别是清楚展示 cwd 和 active run。
 
 ## 从当前 POC 迁移
@@ -333,6 +354,6 @@ Stage 1 测试矩阵：
 2. 保留 `CursorAgentGateway` 的 SDK 适配代码，但把它从 `startRun(): Promise<RunSummary>` 改成会 emit app events 的异步 lifecycle API。
 3. 用 `POST /api/sessions/:sessionId/runs` 替换 `POST /api/runs`，旧 route 可以短期保留但标记 deprecated。
 4. 增加 SSE event endpoints 和 event broker，并为 replay / reconnect 写测试。
-5. 增加 `DiffService`，让 local Cursor run 完成后独立生成 changed files 和 diff summary。
+5. 增加 `CursorStreamMapper`，让真实 Cursor SDK stream 稳定转成 app events，并用 recorded fixtures 覆盖 unknown shape。
 6. 把 frontend 从 run launcher 重构成 session sidebar + timeline + activity panel，同时把 event projection 抽出单测。
 7. 保留 mock mode，但让它产出和真实 Cursor mode 相同形状的 event sequence。

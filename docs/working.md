@@ -36,6 +36,8 @@
 - Playwright verification passed for the design pass: final screenshot shows the design direction in-page and console warnings/errors are clear after adding a small SVG favicon.
 - Milestone 2 completed: added EventBroker, SSE response helpers, SessionService, RunService, async mock gateway execution, session/run REST routes, SSE replay endpoint, and integration tests for immediate queued responses and Last-Event-ID replay.
 - Milestone 3 started by migrating the browser from deprecated blocking `/api/runs` to the session API. The frontend now creates/resumes a localStorage-backed session, starts runs through `/api/sessions/:sessionId/runs`, opens `/api/runs/:id/events` with native EventSource, and renders session-scoped runs, messages, and recent app events.
+- Milestone 4 completed: documented and implemented `CursorStreamMapper`, replacing the temporary raw SDK passthrough with a pure mapper for `assistant`, `thinking`, `tool_call`, `status`, `task`, `request`, and unknown Cursor stream messages. Added deterministic mapper fixtures and an opt-in live Cursor integration test that uses real token + local SDK + temporary cwd + app SSE to create `hello.txt`.
+- Scope correction: diff, file change, and result review are no longer Stage 1 blockers. Stage 1 is now remote prompt -> real Cursor local run -> stream mapping -> SSE -> session projection. Diff/review can be designed later if the product needs a code review panel.
 
 ## Lessons Learned
 
@@ -54,3 +56,4 @@
 - 当前 UI 的主要设计债不是信息架构，而是视觉密度和默认控件气味。下一轮 RFC/UI work 应围绕 compact console header、environment badges、mono prompt editor、compact runs timeline 和 activity panel 展开。
 - Milestone 2 keeps the deprecated blocking `/api/runs` route alive for the current frontend while the new `/api/sessions/:sessionId/runs` path uses EventStore/ProjectionStore and returns queued immediately. This lets Stage 1 migrate UI and Cursor SDK streaming without a big-bang route switch.
 - Native browser `EventSource` is enough for the Stage 1 client because the backend uses GET SSE and supports `Last-Event-ID`; no frontend streaming dependency is needed. The remaining product gap is SDK event fidelity, not transport plumbing.
+- Real Cursor `run.stream()` can emit terminal `status: FINISHED` before `run.wait()` emits final `run.result`. SSE/live tests should wait for both terminal status and result before closing the stream; otherwise the harness can falsely report a missing result event even when the app is correct.
