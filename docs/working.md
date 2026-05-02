@@ -1,0 +1,37 @@
+# Working Log
+
+## Changelog
+
+### 2026-04-29
+
+- Created `adhoc_jobs/cursor_cloud_remote_poc` as a formal scaffolded project.
+- Added TypeScript backend, React frontend, shared contracts, and mock Cursor gateway.
+- Added PRD, RFC, test strategy, README, local AGENTS rules, and environment template.
+- Added unit tests for config parsing, run storage, and Express API behavior.
+- Configured Vitest to run test files serially; API integration tests use an ephemeral loopback listener with `fetch` (Supertest was removed after flaky socket hang ups alongside Cursor SDK imports).
+- Added adapter tests for mock Cursor runs, missing API key handling, and gateway selection.
+- Verified `npm run typecheck`, `npm test`, `npm run coverage`, and `npm run build` pass without Cursor credentials.
+- Incorporated external SDK findings: Cursor supports cloud runs, streaming, `Last-Event-ID` reconnect, `Agent.resume()`, durable follow-up runs, artifacts, and PR creation, but direct mobile calls remain unsafe because `crsr_` API keys are long-lived credentials.
+- Corrected the validation direction from cloud-first to local-first. The target product path is a backend running on the user's Mac with `CURSOR_RUNTIME=local` and `CURSOR_LOCAL_CWD` pointing at a local repo.
+
+### 2026-05-01
+
+- MVP default prompt targets `mvp_sandbox/hello_world.py`; `/api/health` includes `localCwdConfigured`.
+- SDK gateway awaits `run.wait()`, maps terminal status to `completed`/`failed`, attaches optional `resultText`, and disposes agents via `Symbol.asyncDispose`.
+- Deferred `@cursor/sdk` static import until a real run (dynamic `import()` inside `CursorSdkGateway.startRun`).
+- 将 PRD/RFC 从一次性 Cursor SDK launcher 重新定位为 Cursor remote-control server + web client。目标架构是单用户、local-first，借鉴 OpenCode 的 client/server 体验，但不做 OpenCode API 兼容。
+- 设计决策：引入 `Session -> Run -> Event` 作为产品模型。`Session` 是长期用户对话，`Run` 是一次 Cursor prompt 执行，`Event` 是用于 live SSE 和 replay 的 append-only stream。
+- 设计决策：Stage 1 应用 async run lifecycle + SSE 替换阻塞式 `POST /api/runs -> run.wait()`。Cursor `run.stream()` / `onDelta` events 应映射成 `assistant.delta`、`thinking.delta`、`tool.started`、`tool.completed`、`run.result` 等 app events。
+- 设计决策：不实现 OpenCode protocol compatibility。复用 OpenCode 的体验形态——session history、live activity、tool cards、diff/result review——但 server protocol 保持 Cursor-native。
+
+## Lessons Learned
+
+- Cursor API keys must stay server-side; a browser or mobile client should call a project-owned backend instead of Cursor directly.
+- The first useful validation is not UI polish. It is whether Cursor SDK returns enough run/session/diff/stream metadata to support a remote-control product.
+- OpenCode iOS Client is strongly coupled to OpenCode's REST + SSE protocol, so Cursor integration should first prove a compatible backend abstraction before modifying that app.
+- Cursor SDK imports may involve native/platform packages, so default unit tests should avoid unnecessary parallel worker initialization until live SDK behavior is understood.
+- Cursor has no stable first-class diff API in the current evidence. For product UX, PR URL + GitHub API is the safer route for showing final code changes.
+- Cloud runtime validates remote dispatch, but it does not validate local-file remote control. Local runtime is the relevant test for an OpenCode-like experience.
+- OpenCode 最值得借鉴的是架构，而不是协议：REST 承载 durable state，SSE 承载 live events，client 把 agent 工作渲染成 text、activity、tools、results 组成的 timeline。
+- Cursor SDK 已经暴露了 Stage 1 UI 所需的 stream surface：`assistant`、`thinking`、`tool_call`、`status`、`task`，以及更底层的 delta callbacks。Tool event envelope 足够用于展示，但 `args` 和 `result` payloads 应按 best-effort details 处理。
+- `Agent.resume()` 恢复的是 agent，不一定是被中断的 run。带单调 event id 的 app-level event replay 应独立于 SDK-level resume 实现。

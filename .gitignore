@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+data/
+tmp/
+.env
+.env.*
+!.env.example
+.DS_Store
+npm-debug.log*
+vite.config.ts.timestamp-*
+vite.config.js.timestamp-*
