@@ -119,6 +119,26 @@ describe('App chat client', () => {
       })
     );
   });
+
+  it('does not submit on plain Enter and inserts a newline in the prompt', async () => {
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Conversations' })).toBeTruthy();
+    const textarea = screen.getByLabelText('Prompt');
+    await userEvent.clear(textarea);
+    await userEvent.type(textarea, 'line-a');
+    await userEvent.keyboard('{Enter}');
+    await userEvent.type(textarea, 'line-b');
+    expect((textarea as HTMLTextAreaElement).value.replace(/\r\n/g, '\n')).toBe('line-a\nline-b');
+    expect(api.startSessionRun).not.toHaveBeenCalled();
+  });
+
+  it('exposes composer shortcut hint via aria-describedby on the prompt textarea', async () => {
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Conversations' })).toBeTruthy();
+    const textarea = screen.getByLabelText('Prompt');
+    expect(textarea.getAttribute('aria-describedby')).toBe('composer-shortcut-hint');
+    expect(screen.getByText(/Ctrl\+Enter to send/)).toBeTruthy();
+  });
 });
 
 const sessionFixture: SessionProjection = {
