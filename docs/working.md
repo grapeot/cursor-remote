@@ -30,6 +30,7 @@
 - 运行约定：`.env` 已直接提供 `CURSOR_API_KEY`，不依赖 1Password。默认 `CURSOR_LOCAL_CWD` 指向本 repo 根目录，用于自举式开发；live tests 必须覆盖为临时 sandbox，不能改真实 repo。
 - 运行约定：Stage 1 server 默认 `HOST=0.0.0.0`、`PORT=8787`，方便 LAN/Tailscale 设备访问；Tailscale 只作为网络认证层，应用本身不做 token auth。
 - 工作节奏：Stage 1 按小 milestone 实现。每个 milestone 完成后更新 `working.md`，跑 typecheck/test/build，单独 commit，再进入下一个 milestone。
+- Milestone 1 completed: added typed app event contracts, injectable clock/id helpers, in-memory `EventStore`, in-memory `ProjectionStore`, and deterministic tests for event replay, session/run/message projection, and lifecycle integration.
 
 ## Lessons Learned
 
@@ -44,3 +45,4 @@
 - `Agent.resume()` 恢复的是 agent，不一定是被中断的 run。带单调 event id 的 app-level event replay 应独立于 SDK-level resume 实现。
 - 默认测试和 live 测试要分层。默认测试不能依赖网络或 token；live 测试的价值是暴露 token/account、model availability、SDK schema、stream timeout、SSE broker、diff baseline 等 failure layer。
 - Live Cursor 测试必须使用临时 sandbox cwd，不能指向真实 workspace。成功判据应落在客观状态上：event sequence、文件内容、diff changed files、follow-up context 和 replay consistency，而不是自然语言主观判断。
+- `ProjectionStore` 应保持 deterministic materialized view 角色：同一 event log 通过 `rebuild()` 或逐条 `apply()` 得到相同状态；Cursor-derived payload 继续作为 `unknown`/record 处理，只有 app lifecycle payload 做 type guard。
