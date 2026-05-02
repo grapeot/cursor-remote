@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AppEvent } from '../../src/shared/events';
 import type { MessageProjection, RunProjection } from '../../src/shared/projections';
-import { buildTimeline, eventToTimelineItem } from './timeline';
+import { buildTimeline, eventToTimelineItem, flattenJsonForDisplay } from './timeline';
 
 describe('chat timeline projection', () => {
   it('combines projected messages, run status, thinking, and tool cards in chronological order', () => {
@@ -92,6 +92,19 @@ describe('chat timeline projection', () => {
   });
 });
 
+describe('flattenJsonForDisplay', () => {
+  it('flattens nested objects with dotted keys and JSON leaves', () => {
+    expect(flattenJsonForDisplay({ path: 'a.txt', nested: { x: 1, y: { z: false } } })).toEqual([
+      'nested.x: 1',
+      'nested.y.z: false',
+      'path: "a.txt"'
+    ]);
+  });
+
+  it('handles arrays as JSON leaves', () => {
+    expect(flattenJsonForDisplay({ items: [1, 2], empty: {} })).toEqual(['empty: {}', 'items: [1,2]']);
+  });
+});
 function message(overrides: Partial<MessageProjection>): MessageProjection {
   return {
     id: 'message-1',

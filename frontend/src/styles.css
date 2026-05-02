@@ -59,7 +59,6 @@ textarea {
 .sidebar-header,
 .chat-header,
 .chat-actions,
-.tool-header,
 .composer-actions {
   display: flex;
   align-items: center;
@@ -387,6 +386,73 @@ h3 {
   font-size: 0.84rem;
 }
 
+.tool-card {
+  padding: 0;
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-subtle);
+  border-left-width: 4px;
+}
+
+
+.tool-card-details summary {
+  list-style: none;
+}
+
+.tool-card-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.tool-card-summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 0;
+}
+
+.tool-card-summary:hover {
+  background: var(--color-surface-muted);
+}
+
+.tool-card-type {
+  font-weight: 800;
+}
+
+.tool-card-icon {
+  opacity: 0.85;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.tool-card-body {
+  padding: 0 14px 12px;
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: 0;
+}
+
+.tool-kv-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.tool-kv-code {
+  display: inline-block;
+  padding: 3px 6px;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.tool-card-body .tool-result {
+  margin-top: 10px;
+}
+
 .tool-item {
   border-left: 4px solid var(--color-warning);
 }
@@ -424,26 +490,12 @@ h3 {
   line-height: 1.55;
 }
 
-.tool-header {
-  gap: 9px;
-}
-
 .tool-status {
   color: var(--color-text-tertiary);
   font-size: 0.74rem;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-}
-
-.tool-item .tool-args {
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-}
-
-.tool-item .tool-result {
-  margin-top: 8px;
 }
 
 pre,

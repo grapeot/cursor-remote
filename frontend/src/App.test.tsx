@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -65,6 +65,8 @@ describe('App chat client', () => {
       modelId: 'composer-2',
       runtime: 'local'
     }));
+    const sessionRow = screen.getByRole('button', { name: /Remote console/ });
+    await waitFor(() => expect(sessionRow.textContent).toMatch(/running/i));
     expect(MockEventSource.latest().url).toBe('/api/runs/run-1/events');
     expect(screen.getByText(/You · sent ·/)).toBeTruthy();
     expect(screen.getByText('Create hello.txt')).toBeTruthy();
@@ -80,11 +82,16 @@ describe('App chat client', () => {
 
     expect(await screen.findByText(/Thinking · streaming ·/)).toBeTruthy();
     expect(screen.getByText('Inspecting workspace.')).toBeTruthy();
-    expect(screen.getByText('write_file')).toBeTruthy();
+    const toolDetails = screen.getByText('write_file').closest('details') as HTMLDetailsElement | null;
+    expect(toolDetails).toBeTruthy();
+    expect(toolDetails!.open).toBe(false);
+    await userEvent.click(toolDetails!.querySelector('summary') as HTMLElement);
+    expect(toolDetails!.open).toBe(true);
+    expect(within(toolDetails as HTMLElement).getByText(/path:\s*"hello\.txt"/)).toBeTruthy();
     expect(screen.getByText('Wrote hello.txt')).toBeTruthy();
-    expect(screen.getByText(/"path": "hello.txt"/)).toBeTruthy();
     expect(screen.getByText(/Cursor · completed ·/)).toBeTruthy();
     expect(screen.getByText('Created hello.txt.')).toBeTruthy();
+    await waitFor(() => expect(sessionRow.textContent).toMatch(/ready/i));
     expect(MockEventSource.latest().closed).toBe(true);
   });
 
@@ -154,6 +161,69 @@ describe('App chat client', () => {
     );
   });
 
+  it('keeps streamed tool cards when switching conversations and switching back', async () => {
+    const sessionBeta: SessionProjection = {
+      ...sessionFixture,
+      id: 'session-2',
+      title: 'Beta'
+    };
+    vi.mocked(api.listSessions).mockResolvedValue([sessionFixture, sessionBeta]);
+
+    render(<App />);
+    await waitFor(() => expect(api.listSessions).toHaveBeenCalled());
+
+    const textarea = screen.getByLabelText('Prompt');
+    await userEvent.clear(textarea);
+    await userEvent.type(textarea, 'Run tool');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(api.startSessionRun).toHaveBeenCalled());
+
+    vi.mocked(api.listSessionRuns).mockImplementation((sessionId: string) => {
+      if (sessionId === 'session-1') {
+        return Promise.resolve([
+          {
+            ...runFixture,
+            status: 'running' as const,
+            prompt: 'Run tool'
+          }
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    act(() => {
+      MockEventSource.latest().emit(
+        event({ id: 2, type: 'run.status', payload: runStatusPayload('running'), createdAt: '2026-05-01T12:00:01.000Z' })
+      );
+      MockEventSource.latest().emit(
+        event({
+          id: 3,
+          type: 'tool.started',
+          payload: { callId: 'tool-persist', name: 'write_file', args: { path: 'keep.txt' } },
+          createdAt: '2026-05-01T12:00:02.000Z'
+        })
+      );
+    });
+
+    await screen.findByText('write_file');
+
+    await userEvent.click(screen.getByRole('button', { name: /\bBeta\b/ }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', {
+          level: 2,
+          name: 'Beta'
+        })
+      ).toBeTruthy()
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Remote console/ }));
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Remote console' })).toBeTruthy());
+
+    expect(await screen.findByText('write_file')).toBeTruthy();
+  });
+
   it('does not submit on plain Enter and inserts a newline in the prompt', async () => {
     render(<App />);
     expect(await screen.findByRole('heading', { name: 'Conversations' })).toBeTruthy();
@@ -172,6 +242,33 @@ describe('App chat client', () => {
     const textarea = screen.getByLabelText('Prompt');
     expect(textarea.getAttribute('aria-describedby')).toBe('composer-shortcut-hint');
     expect(screen.getByText(/Ctrl\+Enter to send/)).toBeTruthy();
+  });
+
+  it('keeps conversation sidebar status in sync with the active run (running and failed)', async () => {
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Conversations' })).toBeTruthy();
+    const sessionRow = screen.getByRole('button', { name: /Remote console/ });
+    expect(sessionRow.textContent).toMatch(/ready/i);
+
+    const textarea = screen.getByLabelText('Prompt');
+    await userEvent.clear(textarea);
+    await userEvent.type(textarea, 'Fail plz');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(api.startSessionRun).toHaveBeenCalled());
+    await waitFor(() => expect(sessionRow.textContent).toMatch(/running/i));
+
+    act(() => {
+      MockEventSource.latest().emit(
+        event({
+          id: 2,
+          type: 'run.error',
+          payload: { error: 'gateway boom' },
+          createdAt: '2026-05-01T12:00:02.000Z'
+        })
+      );
+    });
+    await waitFor(() => expect(sessionRow.textContent).toMatch(/failed/i));
+    expect(MockEventSource.latest().closed).toBe(true);
   });
 });
 

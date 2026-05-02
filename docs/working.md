@@ -45,6 +45,12 @@
 - UI test milestone completed: extracted the frontend `TimelineItem` projection into `frontend/src/timeline.ts`, added deterministic projection tests, and added a happy-dom React flow test that mounts the chat client with mock API + mock EventSource. The test covers conversation shell load, composer submit, streamed thinking/tool/assistant/result rendering, and closing the stream only after `run.result`.
 - GLM design critique completed and saved to `docs/design_critique.md`. P0/P1 fixes applied: stable append-oriented timeline projection, auto-scroll when the user stays near the bottom, wider user/assistant bubbles, compact run-status rows, streaming activity dots, timestamp labels, hidden raw tool call ids, collapsed model settings, and smoke actions limited to mock mode.
 
+### 2026-05-01 (tooling / indexing)
+
+- 添加根目录 `.cursorignore`（`node_modules`、构建产物、`coverage`、`.env`、`.venv` 等）以便 Cursor 索引更干净。
+- 切换会话时用 `sessionId → AppEvent[]` 内存快照保留每个会话最近一次留在前端的 streamed 事件，避免回来时 `tool`/thinking（仅存在于 live buffer）被 `setEvents([])` 清空；回到仍在跑的会话时对 `queued`/`running` 的 run 重新打开 `/api/runs/:id/events`。
+- Tool 在聊天时间线中改为可折叠卡片：默认仅显示工具名与状态；展开后以 `key: JSON` 形式的扁平化键值行展示参数，结果文案在展开区内。
+
 ### 2026-05-02
 
 - `/api/health` 在已配置 `CURSOR_LOCAL_CWD` 时额外返回 **`localCwd`**（绝对路径）；不含 API key。

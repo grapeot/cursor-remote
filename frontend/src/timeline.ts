@@ -190,6 +190,54 @@ export function formatDetail(value: unknown): string {
   }
 }
 
+/** Pretty key paths with JSON-stringified scalar/array leaves (nested objects flattened with dotted keys). */
+export function flattenJsonForDisplay(value: unknown): string[] {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return [`value: ${stringifyLeaf(value)}`];
+  }
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  if (keys.length === 0) {
+    return [];
+  }
+  const lines: string[] = [];
+  for (const key of keys) {
+    const nested = record[key];
+    if (nested !== null && typeof nested === 'object' && !Array.isArray(nested)) {
+      lines.push(...flattenNestedObject(`${key}`, nested as Record<string, unknown>));
+    } else {
+      lines.push(`${key}: ${stringifyLeaf(nested)}`);
+    }
+  }
+  return lines;
+}
+
+function flattenNestedObject(prefix: string, obj: Record<string, unknown>): string[] {
+  const keys = Object.keys(obj).sort();
+  if (keys.length === 0) {
+    return [`${prefix}: {}`];
+  }
+  const lines: string[] = [];
+  for (const key of keys) {
+    const path = `${prefix}.${key}`;
+    const nested = obj[key];
+    if (nested !== null && typeof nested === 'object' && !Array.isArray(nested)) {
+      lines.push(...flattenNestedObject(path, nested as Record<string, unknown>));
+    } else {
+      lines.push(`${path}: ${stringifyLeaf(nested)}`);
+    }
+  }
+  return lines;
+}
+
+function stringifyLeaf(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return `"${String(value).replace(/"/g, '\\"')}"`;
+  }
+}
+
 export function shortRunId(id: string): string {
   if (id.length <= 18) {
     return id;

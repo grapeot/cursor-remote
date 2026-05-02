@@ -2,8 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { KeyboardEvent, SyntheticEvent } from 'react';
 import type { HealthResponse } from '../../src/shared/contracts';
-import { appEventSchema, isRunErrorPayload, isRunResultPayload, isRunStatusPayload, readStringField } from '../../src/shared/events';
-import type { AppEvent } from '../../src/shared/events';
+import {
+  appEventSchema,
+  isRunErrorPayload,
+  isRunResultPayload,
+  isRunStatusPayload,
+  readStringField
+} from '../../src/shared/events';
+import type { AppEvent, AppRunStatus, SessionStatus } from '../../src/shared/events';
 import type { MessageProjection, RunProjection, SessionProjection } from '../../src/shared/projections';
 import {
   createSession,
@@ -15,7 +21,7 @@ import {
   startSessionRun
 } from './api';
 import { MarkdownContent } from './MarkdownContent';
-import { buildTimeline, formatDetail, shortRunId } from './timeline';
+import { buildTimeline, flattenJsonForDisplay, shortRunId } from './timeline';
 import type { TimelineItem } from './timeline';
 import './styles.css';
 
@@ -26,6 +32,16 @@ print("Hello, world!")
 Use nothing else in that file (no shebang, no imports). If mvp_sandbox/ does not exist, create it.`;
 
 const SESSION_STORAGE_KEY = 'cursor-cloud-remote-poc.sessionId';
+
+function sessionStatusFromRunStatus(status: AppRunStatus): SessionStatus {
+  if (status === 'queued' || status === 'running') {
+    return 'running';
+  }
+  if (status === 'failed') {
+    return 'failed';
+  }
+  return 'idle';
+}
 
 export function App() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -40,13 +56,17 @@ export function App() {
   const [isSending, setIsSending] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const eventSourcesRef = useRef<Map<string, EventSource>>(new Map());
+  const sessionEventsCacheRef = useRef<Map<string, AppEvent[]>>(new Map());
+  const eventsRef = useRef<AppEvent[]>([]);
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const shouldStickToBottomRef = useRef(true);
+  const runsRef = useRef<RunProjection[]>(runs);
+  runsRef.current = runs;
 
   const activeRun = runs.find((run) => run.status === 'queued' || run.status === 'running');
   const timelineItems = useMemo(() => buildTimeline(messages, runs, events), [messages, runs, events]);
 
-  async function loadSessionState(nextSession: SessionProjection): Promise<void> {
+  async function loadSessionState(nextSession: SessionProjection): Promise<RunProjection[]> {
     const [nextRuns, nextMessages] = await Promise.all([
       listSessionRuns(nextSession.id),
       listSessionMessages(nextSession.id)
@@ -54,6 +74,7 @@ export function App() {
     setSession(nextSession);
     setRuns(nextRuns);
     setMessages(nextMessages);
+    return nextRuns;
   }
 
   async function resolveSession(nextSessions: SessionProjection[]): Promise<SessionProjection> {
@@ -77,12 +98,14 @@ export function App() {
         if (!sessionExists) {
           setSessions([resolvedSession, ...nextSessions]);
         }
-        await loadSessionState(resolvedSession);
+        const initialRuns = await loadSessionState(resolvedSession);
+        reconnectStreamingRuns(initialRuns);
         return;
       }
       const refreshedSession = await getSession(targetSession.id);
-      await loadSessionState(refreshedSession);
+      const refreshedRuns = await loadSessionState(refreshedSession);
       setSessions((currentSessions) => upsertSession(currentSessions, refreshedSession));
+      reconnectStreamingRuns(refreshedRuns);
     } finally {
       setIsRefreshing(false);
     }
@@ -99,6 +122,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
+
+  useEffect(() => {
     const timeline = timelineRef.current;
     if (timeline === null || !shouldStickToBottomRef.current) {
       return;
@@ -107,12 +134,20 @@ export function App() {
   }, [timelineItems.length]);
 
   async function selectSession(nextSession: SessionProjection): Promise<void> {
+    if (session !== null && nextSession.id === session.id) {
+      return;
+    }
     setError(null);
-    setEvents([]);
+    const previousSessionId = session?.id;
+    if (previousSessionId !== undefined) {
+      sessionEventsCacheRef.current.set(previousSessionId, [...eventsRef.current]);
+    }
     window.localStorage.setItem(SESSION_STORAGE_KEY, nextSession.id);
     eventSourcesRef.current.forEach((source) => source.close());
     eventSourcesRef.current.clear();
-    await loadSessionState(nextSession);
+    const nextRuns = await loadSessionState(nextSession);
+    setEvents(sessionEventsCacheRef.current.get(nextSession.id) ?? []);
+    reconnectStreamingRuns(nextRuns);
   }
 
   async function createConversation(): Promise<void> {
@@ -136,6 +171,11 @@ export function App() {
         runtime: health?.runtime === 'local' ? 'local' : 'mock'
       });
       setRuns((currentRuns) => upsertRun(currentRuns, response.run));
+      syncSessionRow(session.id, {
+        status: 'running',
+        latestRunId: response.run.id,
+        updatedAt: response.run.updatedAt
+      });
       setMessages((currentMessages) => [
         ...currentMessages,
         createOptimisticUserMessage(session.id, response.run.id, effectivePrompt, response.run.createdAt)
@@ -154,6 +194,22 @@ export function App() {
   async function handleSubmit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     await submitRun();
+  }
+
+  function syncSessionRow(
+    sessionId: string,
+    patch: Partial<Pick<SessionProjection, 'status' | 'latestRunId' | 'updatedAt'>>
+  ): void {
+    setSession((currentSession) =>
+      currentSession !== null && currentSession.id === sessionId ? { ...currentSession, ...patch } : currentSession
+    );
+    setSessions((currentSessions) => {
+      const existing = currentSessions.find((candidate) => candidate.id === sessionId);
+      if (existing === undefined) {
+        return currentSessions;
+      }
+      return upsertSession(currentSessions, { ...existing, ...patch });
+    });
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
@@ -191,6 +247,14 @@ export function App() {
     };
   }
 
+  function reconnectStreamingRuns(runsList: RunProjection[]): void {
+    for (const run of runsList) {
+      if (run.status === 'queued' || run.status === 'running') {
+        openRunEvents(run.id, `/api/runs/${run.id}/events`);
+      }
+    }
+  }
+
   function applyRunEvent(event: AppEvent): void {
     setEvents((currentEvents) => [...currentEvents, event].slice(-80));
     const payload = event.payload;
@@ -200,16 +264,11 @@ export function App() {
           run.id === payload.runId ? { ...run, status: payload.status, updatedAt: event.createdAt } : run
         )
       );
-      setSession((currentSession) =>
-        currentSession === null
-          ? currentSession
-          : {
-              ...currentSession,
-              latestRunId: payload.runId,
-              status: payload.status === 'running' || payload.status === 'queued' ? 'running' : 'idle',
-              updatedAt: event.createdAt
-            }
-      );
+      syncSessionRow(event.sessionId, {
+        latestRunId: payload.runId,
+        status: sessionStatusFromRunStatus(payload.status),
+        updatedAt: event.createdAt
+      });
     }
     if (event.type === 'assistant.delta') {
       const text = readStringField(event.payload, 'text');
@@ -218,11 +277,14 @@ export function App() {
       }
     }
     if (event.type === 'run.result' && isRunResultPayload(payload)) {
+      const prior = runsRef.current.find((run) => run.id === event.runId);
+      const staysTerminal = prior?.status === 'failed' || prior?.status === 'cancelled';
       setRuns((currentRuns) =>
         currentRuns.map((run) =>
           run.id === event.runId
             ? {
                 ...run,
+                status: staysTerminal ? run.status : 'completed',
                 resultText: payload.resultText,
                 diffSummary: payload.diffSummary,
                 completedAt: event.createdAt,
@@ -231,6 +293,12 @@ export function App() {
             : run
         )
       );
+      if (!staysTerminal) {
+        syncSessionRow(event.sessionId, {
+          status: 'idle',
+          updatedAt: event.createdAt
+        });
+      }
       setMessages((currentMessages) => completeAssistantMessage(currentMessages, event));
     }
     if (event.type === 'run.error' && isRunErrorPayload(payload)) {
@@ -239,6 +307,10 @@ export function App() {
           run.id === event.runId ? { ...run, status: 'failed', error: payload.error, updatedAt: event.createdAt } : run
         )
       );
+      syncSessionRow(event.sessionId, {
+        status: 'failed',
+        updatedAt: event.createdAt
+      });
     }
   }
 
@@ -410,21 +482,41 @@ function TimelineItemView({ item }: { item: TimelineItem }) {
     );
   }
   if (item.kind === 'tool') {
-    return (
-      <article className={`timeline-item tool-item tool-${item.status}`}>
-        <div className="tool-header">
-          <span>{item.status === 'running' ? '●' : item.status === 'error' ? '!' : '✓'}</span>
-          <strong>{item.name}</strong>
-          <span className="tool-status">{item.status}</span>
-        </div>
-        {item.detail !== undefined ? <pre className="tool-args">{formatDetail(item.detail)}</pre> : null}
-        {item.summary !== undefined ? <p className="tool-result">{item.summary}</p> : null}
-      </article>
-    );
+    return <ToolTimelineCard item={item} />;
   }
   return (
     <article className={`timeline-item status-item status-${item.tone}`}>
       <span>{item.text} · {formatTimelineTime(item.createdAt)}</span>
+    </article>
+  );
+}
+
+/** Tool invocation: collapsible card; summary shows Cursor tool name only, body shows flattened args + result text. */
+function ToolTimelineCard({ item }: { item: Extract<TimelineItem, { kind: 'tool' }> }) {
+  const kvLines = item.detail !== undefined ? flattenJsonForDisplay(item.detail) : [];
+  return (
+    <article className={`timeline-item tool-item tool-card tool-${item.status}`}>
+      <details className="tool-card-details">
+        <summary className="tool-card-summary" aria-label={`${item.name} (${item.status})`}>
+          <span className="tool-card-icon" aria-hidden="true">
+            {item.status === 'running' ? '●' : item.status === 'error' ? '!' : '✓'}
+          </span>
+          <span className="tool-card-type">{item.name}</span>
+          <span className="tool-status">{item.status}</span>
+        </summary>
+        <div className="tool-card-body">
+          {kvLines.length > 0 ? (
+            <ul className="tool-kv-list">
+              {kvLines.map((line, index) => (
+                <li key={`${index}-${line}`}>
+                  <code className="tool-kv-code">{line}</code>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {item.summary !== undefined ? <p className="tool-result">{item.summary}</p> : null}
+        </div>
+      </details>
     </article>
   );
 }

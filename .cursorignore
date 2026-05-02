@@ -1,0 +1,21 @@
+# Dependencies & build artifacts
+node_modules/
+**/node_modules/
+
+# Frontend / tooling output
+**/dist/
+coverage/
+**/tsconfig.tsbuildinfo
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Python / misc
+.venv/
+**/__pycache__/
+*.py[cod]
+
+# OS & editors
+.DS_Store
