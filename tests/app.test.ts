@@ -115,6 +115,28 @@ describe('createApp', () => {
     }
   });
 
+  it('returns health with localCwd when configured', async () => {
+    const app = createApp(
+      { ...config, cursorApiKey: 'secret', runtime: 'local', localCwd: '/abs/path/to/project' },
+      new TestGateway()
+    );
+    const { server, baseUrl } = await listen(app);
+    try {
+      const response = await fetch(`${baseUrl}/api/health`);
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body).toEqual({
+        ok: true,
+        runtime: 'local',
+        hasCursorApiKey: true,
+        localCwdConfigured: true,
+        localCwd: '/abs/path/to/project'
+      });
+    } finally {
+      await stop(server);
+    }
+  });
+
   it('rejects empty prompts', async () => {
     const app = createApp(config, new TestGateway());
     const { server, baseUrl } = await listen(app);

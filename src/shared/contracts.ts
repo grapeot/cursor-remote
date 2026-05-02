@@ -34,6 +34,8 @@ export interface HealthResponse {
   hasCursorApiKey: boolean;
   /** True when `CURSOR_LOCAL_CWD` is set (required for `local` SDK runs). */
   localCwdConfigured: boolean;
+  /** Absolute working directory from `CURSOR_LOCAL_CWD` when set (localhost POC only). */
+  localCwd?: string;
 }
 
 export interface SendPromptResponse {

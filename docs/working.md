@@ -45,6 +45,12 @@
 - UI test milestone completed: extracted the frontend `TimelineItem` projection into `frontend/src/timeline.ts`, added deterministic projection tests, and added a happy-dom React flow test that mounts the chat client with mock API + mock EventSource. The test covers conversation shell load, composer submit, streamed thinking/tool/assistant/result rendering, and closing the stream only after `run.result`.
 - GLM design critique completed and saved to `docs/design_critique.md`. P0/P1 fixes applied: stable append-oriented timeline projection, auto-scroll when the user stays near the bottom, wider user/assistant bubbles, compact run-status rows, streaming activity dots, timestamp labels, hidden raw tool call ids, collapsed model settings, and smoke actions limited to mock mode.
 
+### 2026-05-02
+
+- `/api/health` 在已配置 `CURSOR_LOCAL_CWD` 时额外返回 **`localCwd`**（绝对路径）；不含 API key。
+- 侧栏 **CWD** 状态：第一行 `set` / `missing`，第二行展示路径并启用 **`overflow-wrap: anywhere`**、**`word-break: break-word`**；侧栏 **`min-width: 0`**、badge **`max-width: 100%`** 防止长路径溢出。
+- 集成测试与 `App.test.tsx` health mock 覆盖带 `localCwd` 的响应。
+
 ## Lessons Learned
 
 - Cursor API keys must stay server-side; a browser or mobile client should call a project-owned backend instead of Cursor directly.

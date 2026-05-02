@@ -52,7 +52,8 @@ export function createApp(config: AppConfig, gateway: CursorAgentGateway, depend
       ok: true,
       runtime: config.runtime,
       hasCursorApiKey: Boolean(config.cursorApiKey),
-      localCwdConfigured: Boolean(config.localCwd)
+      localCwdConfigured: Boolean(config.localCwd),
+      ...(config.localCwd ? { localCwd: config.localCwd } : {})
     });
   });
 

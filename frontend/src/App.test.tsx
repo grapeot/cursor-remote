@@ -30,7 +30,13 @@ describe('App chat client', () => {
       value: MockEventSource
     });
 
-    vi.mocked(api.fetchHealth).mockResolvedValue({ ok: true, runtime: 'local', hasCursorApiKey: true, localCwdConfigured: true });
+    vi.mocked(api.fetchHealth).mockResolvedValue({
+      ok: true,
+      runtime: 'local',
+      hasCursorApiKey: true,
+      localCwdConfigured: true,
+      localCwd: '/tmp/cursor-poc-cwd'
+    });
     vi.mocked(api.listSessions).mockResolvedValue([sessionFixture]);
     vi.mocked(api.getSession).mockResolvedValue(sessionFixture);
     vi.mocked(api.listSessionRuns).mockResolvedValue([]);

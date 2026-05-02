@@ -256,7 +256,12 @@ export function App() {
         <div className="status-stack" aria-label="Environment status">
           <StatusBadge label="Runtime" value={health?.runtime ?? 'loading'} ready={health !== null && health.runtime !== 'mock'} />
           <StatusBadge label="API" value={health?.hasCursorApiKey ? 'configured' : 'missing'} ready={health?.hasCursorApiKey === true} />
-          <StatusBadge label="CWD" value={health?.localCwdConfigured ? 'set' : 'missing'} ready={health?.localCwdConfigured === true} />
+          <StatusBadge
+            label="CWD"
+            value={health?.localCwdConfigured ? 'set' : 'missing'}
+            ready={health?.localCwdConfigured === true}
+            detail={health?.localCwd}
+          />
         </div>
         <nav className="session-list" aria-label="Conversations">
           {sessions.length === 0 ? (
@@ -416,11 +421,26 @@ interface StatusBadgeProps {
   label: string;
   value: string;
   ready: boolean;
+  /** Second line (e.g. full path); word-wrapped. */
+  detail?: string;
 }
 
-function StatusBadge({ label, value, ready }: StatusBadgeProps) {
+function StatusBadge({ label, value, ready, detail }: StatusBadgeProps) {
+  const cls = `status-badge ${ready ? 'status-badge-ready' : 'status-badge-warn'}${detail ? ' status-badge-stacked' : ''}`;
+  if (detail) {
+    return (
+      <span className={cls}>
+        <span className="status-badge-top">
+          <span className="status-dot" aria-hidden="true" />
+          <span>{label}</span>
+          <strong>{value}</strong>
+        </span>
+        <span className="status-badge-detail">{detail}</span>
+      </span>
+    );
+  }
   return (
-    <span className={`status-badge ${ready ? 'status-badge-ready' : 'status-badge-warn'}`}>
+    <span className={cls}>
       <span className="status-dot" aria-hidden="true" />
       <span>{label}</span>
       <strong>{value}</strong>
