@@ -115,6 +115,32 @@ describe('createApp', () => {
     }
   });
 
+  it('serves favicon.svg with svg content type', async () => {
+    const app = createApp(config, new TestGateway());
+    const { server, baseUrl } = await listen(app);
+    try {
+      const response = await fetch(`${baseUrl}/favicon.svg`);
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type') ?? '').toMatch(/image\/svg\+xml/);
+      const body = await response.text();
+      expect(body).toContain('Cursor Remote');
+    } finally {
+      await stop(server);
+    }
+  });
+
+  it('redirects favicon.ico to favicon.svg', async () => {
+    const app = createApp(config, new TestGateway());
+    const { server, baseUrl } = await listen(app);
+    try {
+      const response = await fetch(`${baseUrl}/favicon.ico`, { redirect: 'manual' });
+      expect(response.status).toBe(302);
+      expect(response.headers.get('location')).toBe('/favicon.svg');
+    } finally {
+      await stop(server);
+    }
+  });
+
   it('returns health with localCwd when configured', async () => {
     const app = createApp(
       { ...config, cursorApiKey: 'secret', runtime: 'local', localCwd: '/abs/path/to/project' },

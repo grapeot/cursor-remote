@@ -1,4 +1,4 @@
-# Cursor Cloud Remote POC
+# Cursor Remote
 
 This project tests whether Cursor SDK can support a remote-control style experience: a browser UI sends prompts to a small backend running on your Mac, and the backend starts Cursor agent runs without exposing Cursor credentials to the client.
 

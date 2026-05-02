@@ -78,6 +78,8 @@
 - 文档：**去除本机用户名与绝对 workspace 路径**；设计稿件路径改为占位相对路径。
 - **`ThinkingCoalescer`**（`src/server/thinkingFlush.ts`）：流式 reasoning 后端拼完再发一对 `tool.*` events（`name: 'thinking'`）；`src/server/thinkingFlush` 单元测试、`mapCursorStreamMessage` fixture 对齐「mapper 不收 thinking」。
 - 前端时间线为三列骨架，**tool 卡片跨列全宽**，summary row 为三列网格；Vite：`window.__CCR_ROOT__` + `import.meta.hot.dispose` 缓和 HMR duplicate root。
+- **品牌形象**：`frontend/index.html` 的 `<title>` 与 README 主标题改为 **Cursor Remote**（不再称 Cloud Remote POC）；`src/server/index.ts` 启动日志同步。
+- **`favicon.svg`**：用 **Codex CLI**（模型输出；因默认 read-only sandbox 未直接落盘）审阅后写入 `frontend/public/favicon.svg`。Express 额外注册 **`GET /favicon.svg`**（`image/svg+xml`）与 **`GET /favicon.ico` → 302** 到 svg，单独打 API 端口时也能显示标签图标。
 
 ## Lessons Learned
 

@@ -1,3 +1,4 @@
+import path from 'node:path';
 import cors from 'cors';
 import express, { type Request, type Response } from 'express';
 import type { ZodError } from 'zod';
@@ -46,6 +47,15 @@ export function createApp(config: AppConfig, gateway: CursorAgentGateway, depend
   const app = express();
   app.use(cors());
   app.use(express.json());
+
+  const faviconPath = path.resolve(process.cwd(), 'frontend/public/favicon.svg');
+  app.get('/favicon.svg', (_request, response) => {
+    response.type('image/svg+xml');
+    response.sendFile(faviconPath);
+  });
+  app.get('/favicon.ico', (_request, response) => {
+    response.redirect(302, '/favicon.svg');
+  });
 
   app.get('/api/health', (_request, response) => {
     response.json({

@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Cursor Remote Console">
-  <rect width="64" height="64" rx="16" fill="#2B3A67" />
-  <path d="M19 18h26v7H28v7h14v7H28v7h17v7H19V18Z" fill="#FFFFFF" />
-  <circle cx="47" cy="18" r="5" fill="#1A7F37" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Cursor Remote">
+  <rect width="64" height="64" rx="14" fill="#2B3A67" />
+  <path d="M40 17h5a7 7 0 0 1 0 14h-5" fill="none" stroke="#DDE7FF" stroke-width="5" stroke-linecap="round" />
+  <path d="M18 14l25 25-13 2 7 12-6 3-7-13-8 8 2-37Z" fill="#FFFFFF" />
 </svg>

@@ -17,5 +17,5 @@ const runService = new RunService(config, gateway, eventStore, projectionStore, 
 const app = createApp(config, gateway, { eventStore, projectionStore, eventBroker, sessionService, runService });
 
 app.listen(config.port, () => {
-  console.log(`Cursor Cloud Remote POC API listening on http://localhost:${config.port}`);
+  console.log(`Cursor Remote API listening on http://localhost:${config.port}`);
 });
