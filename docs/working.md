@@ -1,109 +1,85 @@
-# Working Log
+# 工作备忘
 
-## Changelog
+## 变更记录
 
 ### 2026-04-29
 
-- Created `adhoc_jobs/cursor_cloud_remote_poc` as a formal scaffolded project.
-- Added TypeScript backend, React frontend, shared contracts, and mock Cursor gateway.
-- Added PRD, RFC, test strategy, README, local AGENTS rules, and environment template.
-- Added unit tests for config parsing, run storage, and Express API behavior.
-- Configured Vitest to run test files serially; API integration tests use an ephemeral loopback listener with `fetch` (Supertest was removed after flaky socket hang ups alongside Cursor SDK imports).
-- Added adapter tests for mock Cursor runs, missing API key handling, and gateway selection.
-- Verified `npm run typecheck`, `npm test`, `npm run coverage`, and `npm run build` pass without Cursor credentials.
-- Incorporated external SDK findings: Cursor supports cloud runs, streaming, `Last-Event-ID` reconnect, `Agent.resume()`, durable follow-up runs, artifacts, and PR creation, but direct mobile calls remain unsafe because `crsr_` API keys are long-lived credentials.
-- Corrected the validation direction from cloud-first to local-first. The target product path is a backend running on the user's Mac with `CURSOR_RUNTIME=local` and `CURSOR_LOCAL_CWD` pointing at a local repo.
+- 把 `adhoc_jobs/cursor_cloud_remote_poc` 搭成正式脚手架项目。
+- 落地 TypeScript 后端、React 前端、共享契约与 mock Cursor gateway。
+- 增补 PRD、RFC、测试策略、README、本地 AGENTS、环境模板。
+- 为配置解析、run 持久化与 Express API 增加单测。
+- Vitest 串行执行用例；API 集成用临时 loopback + `fetch`（因与 Cursor SDK 同进程的 Supertest socket 不稳已弃用）。
+- mock run、缺失 API key、网关选择等适配层单测就位。
+- 在不配置 Cursor 凭据前提下跑通 `typecheck`、`test`、`coverage`、`build`。
+- 外部/SDK 结论：云 run、流式、`Last-Event-ID` 重连、`Agent.resume()`、后续 follow-up run、artifacts、PR 创建等可查；移动端直连 Cursor **不行**，因 `crsr_` 类 key 等价长期凭据。
+- 验证主轴从 cloud-first 改为 **local-first**：服务端跑在用户 Mac，`CURSOR_RUNTIME=local`、`CURSOR_LOCAL_CWD` 指向本地 checkout。
 
 ### 2026-05-01
 
-- MVP default prompt targets `mvp_sandbox/hello_world.py`; `/api/health` includes `localCwdConfigured`.
-- SDK gateway awaits `run.wait()`, maps terminal status to `completed`/`failed`, attaches optional `resultText`, and disposes agents via `Symbol.asyncDispose`.
-- Deferred `@cursor/sdk` static import until a real run (dynamic `import()` inside `CursorSdkGateway.startRun`).
-- 将 PRD/RFC 从一次性 Cursor SDK launcher 重新定位为 Cursor remote-control server + web client。目标架构是单用户、local-first，借鉴 OpenCode 的 client/server 体验，但不做 OpenCode API 兼容。
-- 设计决策：引入 `Session -> Run -> Event` 作为产品模型。`Session` 是长期用户对话，`Run` 是一次 Cursor prompt 执行，`Event` 是用于 live SSE 和 replay 的 append-only stream。
-- 设计决策：Stage 1 应用 async run lifecycle + SSE 替换阻塞式 `POST /api/runs -> run.wait()`。Cursor `run.stream()` / `onDelta` events 应映射成 `assistant.delta`、`thinking.delta`、`tool.started`、`tool.completed`、`run.result` 等 app events。
-- 设计决策：不实现 OpenCode protocol compatibility。复用 OpenCode 的体验形态——session history、live activity、tool cards、diff/result review——但 server protocol 保持 Cursor-native。
-- 设计决策：不论 Stage 几都不做 connector 平台。产品长期 Cursor-only，网络暴露边界交给 Tailscale，应用层不做 bearer token / OAuth / shared secret auth。
-- 设计决策：当前阻塞式 POC 标记为 deprecated reference。后续实现围绕 `EventStore`、`ProjectionStore`、`EventBroker`、`RunService`、`DiffService` 和 `CursorStreamMapper` 重建，不继续在单一 `POST /api/runs` launcher 上堆功能。
-- 设计决策：测试覆盖是一等需求。默认 deterministic suite 证明 app logic 正确；`RUN_CURSOR_LIVE_TESTS=1` 的 live Cursor suite 用真实 token、`composer-2` 和一次性 sandbox 判断 Cursor API 当前是否可用。
-- Evaluation plan 已细化到 `docs/test.md`：覆盖 unit、API integration、SSE replay、frontend projection、local diff、mock gateway event sequence、live Cursor sandbox、coverage gate 和 failure diagnosis matrix。
-- 运行约定：`.env` 已直接提供 `CURSOR_API_KEY`，不依赖 1Password。默认 `CURSOR_LOCAL_CWD` 指向本 repo 根目录，用于自举式开发；live tests 必须覆盖为临时 sandbox，不能改真实 repo。
-- 运行约定：Stage 1 server 默认 `HOST=0.0.0.0`、`PORT=8787`，方便 LAN/Tailscale 设备访问；Tailscale 只作为网络认证层，应用本身不做 token auth。
-- 工作节奏：Stage 1 按小 milestone 实现。每个 milestone 完成后更新 `working.md`，跑 typecheck/test/build，单独 commit，再进入下一个 milestone。
-- Milestone 1 completed: added typed app event contracts, injectable clock/id helpers, in-memory `EventStore`, in-memory `ProjectionStore`, and deterministic tests for event replay, session/run/message projection, and lifecycle integration.
-- Design review started after Milestone 1: captured the current UI with Playwright, asked GLM 5.1 for critique, and added `docs/design.md` as the visual direction for a premium Cursor remote-control console.
-- UI design pass applied to the current POC: compact console header, environment badges, mono prompt editor, Quick actions container, right-aligned primary action, and compact run timeline rows with shortened run ids.
-- Playwright verification passed for the design pass: final screenshot shows the design direction in-page and console warnings/errors are clear after adding a small SVG favicon.
-- Milestone 2 completed: added EventBroker, SSE response helpers, SessionService, RunService, async mock gateway execution, session/run REST routes, SSE replay endpoint, and integration tests for immediate queued responses and Last-Event-ID replay.
-- Milestone 3 started by migrating the browser from deprecated blocking `/api/runs` to the session API. The frontend now creates/resumes a localStorage-backed session, starts runs through `/api/sessions/:sessionId/runs`, opens `/api/runs/:id/events` with native EventSource, and renders session-scoped runs, messages, and recent app events.
-- Milestone 4 completed: documented and implemented `CursorStreamMapper`, replacing the temporary raw SDK passthrough with a pure mapper for `assistant`, `thinking`, `tool_call`, `status`, `task`, `request`, and unknown Cursor stream messages. Added deterministic mapper fixtures and an opt-in live Cursor integration test that uses real token + local SDK + temporary cwd + app SSE to create `hello.txt`.
-- Scope correction: diff, file change, and result review are no longer Stage 1 blockers. Stage 1 is now remote prompt -> real Cursor local run -> stream mapping -> SSE -> session projection. Diff/review can be designed later if the product needs a code review panel.
-- Product reset after reviewing the post-SSE UI: the current browser is still a launcher/event monitor, not the desired coding client. Next frontend milestone should rebuild around OpenCode-like conversations: left session list, right chat timeline, session-scoped composer, rendered assistant/thinking/tool/status blocks, and no raw SSE event table in the default UI.
-- Process correction: design critique should run after the functional chat client exists. The intermediate GLM critique based on the event-monitor UI was discarded and should not guide the next implementation milestone.
-- OpenCode reference pass completed. iOS client points to session sidebar + transcript + inline tool cards + streaming reasoning (`SessionListView`, `ChatTabView`, `MessageRowView`, `ToolPartView`, `StreamingReasoningView`). Official OpenCode points to message parts as the rendering unit (`message-v2.ts`, `Share.tsx`, `share/part.tsx`) and the bootstrap snapshot + incremental event pattern. Cursor UI will implement a smaller app-level `TimelineItem` projection from Cursor events.
-- Frontend chat-client rewrite applied: replaced the single-column launcher/event monitor with a persistent conversation sidebar, selected-session chat header, timeline projection, and sticky composer. The raw SSE event panel is removed from default UI; `assistant.delta`, `thinking.delta`, tool events, task updates, run errors and run statuses now render as chat timeline items.
-- UI test milestone completed: extracted the frontend `TimelineItem` projection into `frontend/src/timeline.ts`, added deterministic projection tests, and added a happy-dom React flow test that mounts the chat client with mock API + mock EventSource. The test covers conversation shell load, composer submit, streamed thinking/tool/assistant/result rendering, and closing the stream only after `run.result`.
-- GLM design critique completed and saved to `docs/design_critique.md`. P0/P1 fixes applied: stable append-oriented timeline projection, auto-scroll when the user stays near the bottom, wider user/assistant bubbles, compact run-status rows, streaming activity dots, timestamp labels, hidden raw tool call ids, collapsed model settings, and smoke actions limited to mock mode.
+- `/api/health` 含 `localCwdConfigured`（后亦在配置 cwd 时返回绝对路径 `localCwd`，响应中不含 API key）。
+- Gateway 等待 `run.wait()`，终点态映射 `completed` / `failed`，附带可选 `resultText`，agent 释放走 `Symbol.asyncDispose`。
+- 真实跑之前对 `@cursor/sdk` 只做动态 `import()`，避免无谓加载原生依赖。
+- PRD/RFC 从一次性 Cursor launcher 收口为：**单用户、local-first 的 Cursor remote-control server + web**，借鉴 OpenCode 形态，不做 OpenCode 协议兼容。
+- 产品模型定为 `Session → Run → Event`，Event 作为 SSE/replay 的 append-only 源。
+- Stage 1 用 async run + SSE 取代阻塞式 `POST /api/runs → run.wait()`；`run.stream()` / delta 映射为 `assistant.*`、`thinking`、`tool.*`、`run.result` 等应用事件。
+- 不做多端 connector；长期 Cursor-only；暴露面交给 Tailscale，应用层不做 bearer/OAuth/shared secret。
+- 旧阻塞 POC 归档为废弃参考；新实现围绕 EventStore、ProjectionStore、EventBroker、RunService、DiffService、CursorStreamMapper，不再在单边 launcher 上堆功能。
+- 测试：默认确定性套件；`RUN_CURSOR_LIVE_TESTS=1` + 临时目录做单次 live 烟测细节见 `docs/test.md`。
+- 运行：`CURSOR_API_KEY` 走 `.env`；本地开发 cwd 可先指向本仓库根；live 必须临时 sandbox，不改真实 workspace。Server 默认 `HOST=0.0.0.0`、`PORT=8787`。约定按小里程碑推进：每阶段更新本文档并跑 typecheck/test/build。
+- Milestone 1：应用级事件契约、可注入时钟/ID、内存 EventStore / ProjectionStore、回放与生命周期单测。
+- Milestone 1 后试过 Playwright 截屏 + GLM critique，沉淀 `docs/design.md`（偏 premium 远端控制台）。
+- UI 雏形：紧凑顶栏、环境 badge、mono 编辑器、quick actions、右对齐主按钮、短 run id 时间线。
+- Milestone 2：EventBroker、SSE 辅助函数、Session/Run service、异步 mock gateway、会话/运行 REST、`Last-Event-ID` replay 集成测。
+- Milestone 3：前端废弃阻塞 `/api/runs`，改 localStorage session、`/api/sessions/:id/runs`、原生 EventSource、`/api/runs/:id/events`，展示会话内 run/message/近期事件。
+- Milestone 4：`CursorStreamMapper` 定型；可选 live：`hello.txt` 写临时 cwd + SSE。
+- Stage 1 收口为：远端 prompt → 本地 Cursor run → 映射 → SSE → 会话投影（diff/review 可后置）。
+- 产品纠偏：当时 UI 仍偏 launcher/event monitor；目标改为左侧会话列表、右侧 timeline、composer，默认不展示裸 SSE。
+- GLM critique 若在「未成形的 chat」阶段产生，不作为后续里程碑主依据。
+- OpenCode：侧栏 + transcript + 工具卡 + reasoning 展示；我们以更小的 `TimelineItem` 从 Cursor 事件投影。
+- 前端重写 chat shell：侧边栏会话、timeline、粘性 composer，`assistant.delta` / tool / thinking 合成 / run 终结态进时间线。
+- 前端抽 `timeline.ts` + 投影单测；happy-dom 集成测覆盖 mock fetch + MockEventSource、`run.result` 后收流。
+- `docs/design_critique.md` 归档 GLM critique；对齐 P0/P1：timeline 追加式、靠近底部自动滚动、气泡宽度、紧凑状态行、流式圆点、时间戳、弱化 raw tool id、模型设置折叠；（当时）mock 下 quick fill 仍存在，后同日后续条目已删掉。
+- 根目录 `.cursorignore`：`node_modules`、构建产出、`coverage`、`.env`、`.venv` 等不入索引。
+- 切换会话时按 `sessionId` 缓存最近一轮前端缓冲事件，避免回到会话时仅存 `tool`/thinking 的 buffer 被 `setEvents([])` 清空；仍在跑的 run 重连 SSE。
+- 时间线工具行改为可折叠卡：概要仅工具名与状态；展开为扁平 `key` + JSON。
+- 侧栏会话按「有效活动时间」排序：服务端 `updatedAt` 与流式事件时间取较新者，减轻正文已更新列表滞后。
+- 侧栏圆点：绿=会话 running；蓝=相对上次打开的未读叠加；打开会话时用 localStorage 记 read ack。（`frontend/src/sessionSidebar.test.ts`、`App.test.tsx` 覆盖。）
+- `selectSession` 经 `getSession` 拉满投影、`upsert` 进列表。
+- SSE 疑难杂症仍待：`EventSource` 薄封装打点 `lastEventId`/`readyState`/截断 payload、可选 `?sseDebug=1` 等对拍。
+- Markdown 气泡：`react-markdown` + `remark-gfm`、禁 raw HTML；`MarkdownContent.test.tsx` + `App.test.tsx` 覆盖标题/GFM。
+- CWD badge：两行展示路径，`overflow-wrap`/`word-break`、侧栏 `min-width:0` 防止长路径撑破。
+- **Reasoning**：后端 `thinking` 流聚合为单次 synthetic `thinking` tool；前端不订 `thinking.delta`。
+- 工具卡：`started`/`completed` 同源 `callId` 合并，保留 args；`<details>` 默认收起。
+- Composer：Enter 换行；⌘Enter / Ctrl+Enter 等同 Send；快捷键文案 `aria-describedby`。
+- Coverage 包含 `frontend/src/main.tsx`，由挂载测覆盖快捷键与 aria。
+- `syncSessionRow`：侧栏与选中会话状态对齐 `ProjectionStore`；optimistic running；`run.result`/`run.error` 收敛终端态。结论写回 `docs/rfc.md`、`docs/test.md`。
+- 公开仓库清扫：移除 `npm run dev:op` 叙述；密钥说明以 Cursor 控制台为准；`op://` 仅示意可选 secret manager。
+- 文档去掉真实用户名与本机绝对路径；设计稿改用相对占位路径。
+- `ThinkingCoalescer`（`thinkingFlush.ts`）：后端拼完后成对发出 `tool.started` / `tool.completed`（`thinking`）；单测与 mapper fixture 对齐「mapper 不接裸 thinking delta」。
+- 时间线栅格为三列骨架，tool 卡跨列全宽；`__CCR_ROOT__` + `import.meta.hot.dispose` 缓解 HMR 双 mount。
+- 品牌与标题统一为 Cursor Remote（`index.html`、README、服务端启动日志）。
+- `frontend/public/favicon.svg`；Express 增加 `/favicon.svg` 与 `/favicon.ico` 302。
+- Composer **默认空白**，长文案仅作 **`placeholder`**，避免误发；去掉 mock「Fill hello / smoke」快捷填充。
+- 删除仓库内 `mvp_sandbox/`、`scripts/run_mvp_once.ts` 与 **`npm run mvp:run`**；日常全靠用户自拟 prompt；需要真实 SDK 走 `RUN_CURSOR_LIVE_TESTS` 临时 cwd。
+- 根目录 bilingual README（英文为主 + 中文锚链）、指向 PRD/RFC 等文档；GitHub Actions CI：`typecheck` / `test` / `build`。
+- （环境）在本机装好 Playwright 用 Chromium：`npx playwright install chromium`（首镜可能超时会自动换 CDN，属正常）。
 
-### 2026-05-01 (tooling / indexing)
+## 经验教训
 
-- 添加根目录 `.cursorignore`（`node_modules`、构建产物、`coverage`、`.env`、`.venv` 等）以便 Cursor 索引更干净。
-- 切换会话时用 `sessionId → AppEvent[]` 内存快照保留每个会话最近一次留在前端的 streamed 事件，避免回来时 `tool`/thinking（仅存在于 live buffer）被 `setEvents([])` 清空；回到仍在跑的会话时对 `queued`/`running` 的 run 重新打开 `/api/runs/:id/events`。
-- Tool 在聊天时间线中改为可折叠卡片：默认仅显示工具名与状态；展开后以 `key: JSON` 形式的扁平化键值行展示参数，结果文案在展开区内。
-
-### 2026-05-02 (sidebar activity + stream diagnosis)
-
-- Conversation list is **sorted by effective activity time** (server `SessionProjection.updatedAt` merged with streamed event timestamps where the list would otherwise lag body text).
-- Sidebar **status dots**: green = session `running`, blue = **unread** (projection activity newer than last opened ack for that id). Running wins when both apply. Opening a conversation **stores a read ack** in localStorage (`sessionSidebar` helpers) so blue clears without server support for per-tab unread counts.
-- `selectSession` now **hydrates via `GET /sessions/:id`** (`getSession`), **upserts** the refreshed row into `sessions`, and aligns read ack logic with that projection. Multi-session frontend tests stub `getSession` by session id accordingly.
-- **Streaming UI anomalies**: definitive root cause still depends on reproducible frontend logs plus (ideally) a **narrow `EventSource` wrapper** logging `lastEventId`, `readyState`, `type`, and truncated `MessageEvent.data` on every message and error. Next dynamic step once logs land: correlate disconnects (`onerror`), missing `assistant.delta`, or reorder bugs in `buildTimeline`; consider an opt-in **`?sseDebug=1`** flag or mirrored events in-memory buffer for screenshots.
-- Tests: **`frontend/src/sessionSidebar.test.ts`** (pure sidebar math), **`App.test.tsx`** (sort + unread + running-only dot), existing tool-card switch test updated for `getSession` routing.
-
-- `/api/health` 在已配置 `CURSOR_LOCAL_CWD` 时额外返回 **`localCwd`**（绝对路径）；不含 API key。
-- Assistant 气泡：使用 **`react-markdown`** + **`remark-gfm`** 将模型返回的 Markdown 渲染为安全 HTML（不启用原始 HTML passthrough）；内容仅空白时使用 `markdown-body--empty` 占位。
-- `.assistant-item .markdown-body` 补充列表、表格、blockquote、分割线等样式，与现有聊天密度一致。
-- 测试：`MarkdownContent.test.tsx` 做单测（强调、标题、GFM 表、空白输入）；`App.test.tsx` 增加 SSE `assistant.delta` 含 ATX 标题与加粗语法时的集成断言（真实 heading + strong DOM）。
-- 侧栏 **CWD** 状态：第一行 `set` / `missing`，第二行展示路径并启用 **`overflow-wrap: anywhere`**、**`word-break: break-word`**；侧栏 **`min-width: 0`**、badge **`max-width: 100%`** 防止长路径溢出。
-- 集成测试与 `App.test.tsx` health mock 覆盖带 `localCwd` 的响应。
-- **Reasoning**：Cursor `thinking` 流在服务端聚合成单次 **`thinking` synthetic tool**，客户端不再订阅 `thinking.delta`；timeline 上以折叠 tool 卡片展示。
-
-- **Tool 卡片**：`tool.started` 与 `tool.completed` **合并**同一 `callId`，完成后仍保留 **args（detail）**；折叠 `<details>` 默认收起，`write_file`/`thinking` 等均在展开区查看参数与结果。
-- **Composer 快捷键**：**Enter** 换行；**⌘↵（Meta+Enter）或 Ctrl+Enter** 发送（与 Send 按钮同一套 `submitRun` 校验）；快捷键说明在 Prompt 标题旁，并用 **`aria-describedby`** 关联到 textarea。
-- **Coverage / `App.test.tsx`**：`vitest` 覆盖率 **`include`** 不再排除 `frontend/src/main.tsx`（入口组件仍主要由挂载集成测试覆盖）。`App.test.tsx` 覆盖：Send、Meta+Enter / Ctrl+Enter 发送、**纯 Enter 不调用 `startSessionRun` 且保留换行**、textarea **`aria-describedby`** 与快捷键文案。
-- **Conversations 侧栏 vs timeline 状态**：在 `frontend/src/main.tsx` 用 `syncSessionRow` 让 `sessions` 列表与选中 session 同事务更新；`sessionStatusFromRunStatus` 对齐 `ProjectionStore`；`submitRun` 乐观 `running`；`run.result` / `run.error` 修正客户端 run 与 session 终端态（缓和漏掉 SSE 或断线时的 stale `activeRun`）。本轮将上述诊断与测试矩阵写回 `docs/rfc.md`、`docs/test.md`。
-
-### 2026-05-03 — public-repo hygiene & reasoning-as-tool
-
-- README / `.env.example`：**不再**预设 `npm run dev:op`（已删除配套脚本条目）；密钥说明以 Cursor dashboard 为主，README 中用**虚构** `op://…` 示例注释「可选外部 secret manager 注入」，非硬依赖。
-- 文档：**去除本机用户名与绝对 workspace 路径**；设计稿件路径改为占位相对路径。
-- **`ThinkingCoalescer`**（`src/server/thinkingFlush.ts`）：流式 reasoning 后端拼完再发一对 `tool.*` events（`name: 'thinking'`）；`src/server/thinkingFlush` 单元测试、`mapCursorStreamMessage` fixture 对齐「mapper 不收 thinking」。
-- 前端时间线为三列骨架，**tool 卡片跨列全宽**，summary row 为三列网格；Vite：`window.__CCR_ROOT__` + `import.meta.hot.dispose` 缓和 HMR duplicate root。
-- **品牌形象**：`frontend/index.html` 的 `<title>` 与 README 主标题改为 **Cursor Remote**（不再称 Cloud Remote POC）；`src/server/index.ts` 启动日志同步。
-- **`favicon.svg`**：用 **Codex CLI**（模型输出；因默认 read-only sandbox 未直接落盘）审阅后写入 `frontend/public/favicon.svg`。Express 额外注册 **`GET /favicon.svg`**（`image/svg+xml`）与 **`GET /favicon.ico` → 302** 到 svg，单独打 API 端口时也能显示标签图标。
-
-### 2026-05-04 — composer placeholder & remove `mvp_sandbox`
-
-- Frontend **composer** starts with an empty `prompt`; the previous long default text is **`placeholder`** only (`e.g. Create a minimal Python hello-world script in this repo and run it`), so ⌘↵ / Send does not fire a pre-filled task.
-- Removed mock-only quick actions (**Fill Python hello world** / **Use smoke prompt**).
-- Deleted repo **`mvp_sandbox/`** (`.gitkeep`, `hello_world.py`) and **`scripts/run_mvp_once.ts`** plus **`npm run mvp:run`**. Live SDK verification remains **`RUN_CURSOR_LIVE_TESTS=1`** with a temp cwd in `tests/live.cursor.test.ts`; day-to-day use is entirely user-authored prompts.
-
-## Lessons Learned
-
-- Cursor API keys must stay server-side; a browser or mobile client should call a project-owned backend instead of Cursor directly.
-- The first useful validation is not UI polish. It is whether Cursor SDK returns enough run/session/diff/stream metadata to support a remote-control product.
-- OpenCode iOS Client is strongly coupled to OpenCode's REST + SSE protocol, so Cursor integration should first prove a compatible backend abstraction before modifying that app.
-- Cursor SDK imports may involve native/platform packages, so default unit tests should avoid unnecessary parallel worker initialization until live SDK behavior is understood.
-- Cursor has no stable first-class diff API in the current evidence. For product UX, PR URL + GitHub API is the safer route for showing final code changes.
-- Cloud runtime validates remote dispatch, but it does not validate local-file remote control. Local runtime is the relevant test for an OpenCode-like experience.
-- OpenCode 最值得借鉴的是架构，而不是协议：REST 承载 durable state，SSE 承载 live events，client 把 agent 工作渲染成 text、activity、tools、results 组成的 timeline。
-- Cursor SDK 已经暴露了 Stage 1 UI 所需的 stream surface：`assistant`、`thinking`、`tool_call`、`status`、`task`，以及更底层的 delta callbacks。Tool event envelope 足够用于展示，但 `args` 和 `result` payloads 应按 best-effort details 处理。
-- `Agent.resume()` 恢复的是 agent，不一定是被中断的 run。带单调 event id 的 app-level event replay 应独立于 SDK-level resume 实现。
-- 默认测试和 live 测试要分层。默认测试不能依赖网络或 token；live 测试的价值是暴露 token/account、model availability、SDK schema、stream timeout、SSE broker、diff baseline 等 failure layer。
-- Live Cursor 测试必须使用临时 sandbox cwd，不能指向真实 workspace。成功判据应落在客观状态上：event sequence、文件内容、diff changed files、follow-up context 和 replay consistency，而不是自然语言主观判断。
-- `ProjectionStore` 应保持 deterministic materialized view 角色：同一 event log 通过 `rebuild()` 或逐条 `apply()` 得到相同状态；Cursor-derived payload 继续作为 `unknown`/record 处理，只有 app lifecycle payload 做 type guard。
-- 当前 UI 的主要设计债不是信息架构，而是视觉密度和默认控件气味。下一轮 RFC/UI work 应围绕 compact console header、environment badges、mono prompt editor、compact runs timeline 和 activity panel 展开。
-- Milestone 2 keeps the deprecated blocking `/api/runs` route alive for the current frontend while the new `/api/sessions/:sessionId/runs` path uses EventStore/ProjectionStore and returns queued immediately. This lets Stage 1 migrate UI and Cursor SDK streaming without a big-bang route switch.
-- Native browser `EventSource` is enough for the Stage 1 client because the backend uses GET SSE and supports `Last-Event-ID`; no frontend streaming dependency is needed. The remaining product gap is SDK event fidelity, not transport plumbing.
-- Real Cursor `run.stream()` can emit terminal `status: FINISHED` before `run.wait()` emits final `run.result`. SSE/live tests should wait for both terminal status and result before closing the stream; otherwise the harness can falsely report a missing result event even when the app is correct.
-- A passing stream integration test is necessary but not sufficient. The product acceptance criterion is the client experience: selecting a conversation, chatting with Cursor, and seeing tool/thinking/status rendered in a usable timeline similar to OpenCode clients.
-- 前端对 **同一 session** 维护 `sessions[]`（侧栏）与 `session`（选中项）两套投影时，任一 SSE 或乐观更新若不同时 `upsert` 列表项，就会出现「点在 job 上显示 streaming / failed，侧栏仍 ready / running」的假不同步；列表必须与 `ProjectionStore` 使用同一套 `SessionStatus` 推导规则。
+- Cursor API key 只能留在服务端；浏览器/移动端应打自有后端而非直连 Cursor。
+- 首期价值在 SDK 是否能提供足够 **run/session/stream/diff 元数据** 支撑远端控制形态，不只是 UI。
+- OpenCode iOS 强耦合其 REST/SSE；接 Cursor 时应先在后端抽象出稳定协议再给客户端改。
+- Cursor SDK 可能拉原生组件，默认单测别太激进并行初始化，除非你已摸清 live 行为。
+- 证据链条里 Cursor 难有稳定一等 diff API；展示变更更稳妥的路线常是 PR URL + GitHub API。
+- Cloud run 只能说明远端派发；**本地文件远端控制** 要看 local runtime。
+- 借鉴 OpenCode 的是 **分层**：REST 承载状态，SSE 承载增量，timeline 聚合 text/tool/status。
+- SDK 侧的 `assistant` / `thinking` / `tool_call` / `status` / `task`（及 delta）够 Stage 1 使用；payload 只做 best-effort 解析。
+- `Agent.resume()` 恢复 agent 与被中断 run 不完全等价；应用级单调 event replay 应与 SDK resume 拆开设计。
+- 默认测与 live 测分层：CI 不测网；live 用来暴露帐号、模型、超时、SSE、schema 漂移。
+- Live 测试 cwd 必须用临时目录，成功标准落在文件、序列、replay 一致性等客观产物上。
+- `ProjectionStore` 应对同一日志 `rebuild/apply` 得到相同物化视图；Cursor payload 仍可 `unknown`，仅生命周期载荷强类型。
+- Stage 2 仍可暂时保留老旧阻塞路由作迁移过渡，新会话路径走异步 + ProjectionStore。
+- 浏览器原生 `EventSource` + GET SSE + `Last-Event-ID` 对 Stage 1 够用，不必引额外流式库。
+- `run.stream()` 可能早于 `wait()` 先给终点 `FINISHED`，集成测要等到 `run.result` 再过关以免假阴性。
+- 测过流不等于产品过关；交付标准是「会话 + 可控 timeline」体验对齐 OpenCode 类产物。
+- 同一 session 维度同时维护列表与选中项两套投影时，SSE/乐观路径必须 **`upsert` 同源规则**，否则列表与正文状态会假性脱节。
