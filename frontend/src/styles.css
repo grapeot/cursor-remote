@@ -1,0 +1,186 @@
+:root {
+  color: #172033;
+  background: #eef2f8;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.shell {
+  box-sizing: border-box;
+  max-width: 980px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 48px 20px;
+}
+
+.hero {
+  margin-bottom: 24px;
+}
+
+.eyebrow,
+.label,
+.muted,
+.empty {
+  color: #63708a;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 4rem);
+  line-height: 1;
+}
+
+.panel {
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(100, 116, 139, 0.18);
+  border-radius: 22px;
+  box-shadow: 0 18px 50px rgba(29, 42, 68, 0.08);
+  margin: 18px 0;
+  padding: 22px;
+}
+
+.status-panel,
+.grid,
+.section-heading,
+.run-header {
+  display: flex;
+  gap: 16px;
+}
+
+.status-panel > div,
+.grid > label {
+  flex: 1;
+}
+
+.label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.8rem;
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+}
+
+label {
+  display: grid;
+  gap: 8px;
+  font-weight: 700;
+}
+
+input,
+textarea {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  padding: 12px 14px;
+  color: #172033;
+  background: #ffffff;
+}
+
+textarea {
+  resize: vertical;
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 18px;
+  color: #ffffff;
+  background: #2854d8;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.secondary {
+  color: #2854d8;
+  background: #e7ecff;
+}
+
+.warn {
+  margin: 0;
+  padding: 14px 18px;
+  border-radius: 16px;
+  border: 1px solid #f5d0a8;
+  background: #fff8eb;
+  color: #7c2d12;
+}
+
+.mvp-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.inline-hint {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.inline-hint code {
+  font-weight: 600;
+}
+
+.error {
+  color: #b42318;
+}
+
+.section-heading {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.runs {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.runs li {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.run-header {
+  align-items: center;
+  justify-content: space-between;
+}
+
+code {
+  color: #475569;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 720px) {
+  .status-panel,
+  .grid,
+  .run-header {
+    display: grid;
+  }
+}
