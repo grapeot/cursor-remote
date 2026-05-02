@@ -53,7 +53,7 @@ Copy **`.env.example`** → **`.env`**. Sensitive values must not be committed.
 | --- | --- |
 | `CURSOR_API_KEY` | Required for live Cursor SDK; omit or use mocks for playground. |
 | `CURSOR_RUNTIME` | `mock` \| `local` \| `cloud` — **`mock`** keeps everything runnable offline. |
-| `CURSOR_LOCAL_CWD` | Repo path the agent sees when `CURSOR_RUNTIME=local` (`.` = repo root with `mvp_sandbox/` etc.). |
+| `CURSOR_LOCAL_CWD` | Directory the agent sees when `CURSOR_RUNTIME=local` (`.` = checkout root unless you override). |
 | `CURSOR_DEFAULT_REPO_URL` | Cloud runs: `https://github.com/<owner>/<repo>`. |
 
 Optional secret managers (illustrative only):
@@ -64,17 +64,9 @@ CURSOR_API_KEY="$(op read 'op://YourVault/ExampleItem/credential')" npm run dev
 
 Mock mode skips that entirely.
 
-### Minimal MVP (Python hello, local SDK)
+### Local SDK from the UI
 
-1. `CURSOR_RUNTIME=local`, `CURSOR_LOCAL_CWD=.` (or another cwd), `CURSOR_API_KEY` set.
-2. `npm run dev`, send prompt or use bundled smoke prompt.
-3. Check `mvp_sandbox/hello_world.py`: `python3 mvp_sandbox/hello_world.py` → `Hello, world!`
-
-CLI without browser:
-
-```bash
-npm run mvp:run
-```
+With `CURSOR_RUNTIME=local`, `CURSOR_LOCAL_CWD`, and `CURSOR_API_KEY` set, restart `npm run dev` and type your task in the composer (empty by default—the grey text is placeholder only).
 
 ## Runtime modes at a glance
 
@@ -140,6 +132,6 @@ cp .env.example .env
 npm run dev
 ```
 
-浏览器：`http://localhost:5177`；后端：`http://localhost:8787`。要离开 mock：`CURSOR_API_KEY`、`CURSOR_RUNTIME=local`、`CURSOR_LOCAL_CWD`。云端对比路径：`CURSOR_RUNTIME=cloud` + `CURSOR_DEFAULT_REPO_URL`。
+浏览器：`http://localhost:5177`；后端：`http://localhost:8787`。要离开 mock：`CURSOR_API_KEY`、`CURSOR_RUNTIME=local`、`CURSOR_LOCAL_CWD`。云端对比路径：`CURSOR_RUNTIME=cloud` + `CURSOR_DEFAULT_REPO_URL`。composer 默认为空；灰色提示仅为 **placeholder**，不会随 Send 送出。
 
 常用命令：`npm run typecheck`、`npm test`、`npm run build`。合并到 **`master`** 后 GitHub Actions 会跑同样检查。
