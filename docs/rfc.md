@@ -302,6 +302,12 @@ ThinkingBlock
 RunStatusBadge
 ```
 
+### OpenCode reference findings
+
+OpenCode iOS client 的核心参考文件：`Views/SessionListView.swift`、`Views/Chat/ChatTabView.swift`、`Views/Chat/MessageRowView.swift`、`Views/Chat/ToolPartView.swift`、`Views/Chat/StreamingReasoningView.swift`、`Stores/MessageStore.swift`、`Controllers/ActivityTracker.swift`。它的关键规则是：session list 是长期导航；chat transcript 是主要工作区；running tool card 默认展开，完成后自动收起；streaming reasoning 和 assistant text 分开渲染；status 文案来自最近 activity，而不是只显示最终 run state。
+
+OpenCode official 的核心参考文件：`packages/opencode/src/session/message-v2.ts`、`packages/opencode/src/server/routes/instance/httpapi/session.ts`、`packages/opencode/src/server/routes/instance/event.ts`、`packages/opencode/src/sync/index.ts`、`packages/web/src/components/Share.tsx`、`packages/web/src/components/share/part.tsx`。它的关键规则是：`Session` 是壳，`Message` 分 user/assistant，`Part` 才是渲染单位；首屏通过 message history/bootstrap 拿快照，后续通过 sync/SSE 事件做增量更新。
+
 第一版 UI 应该是两栏或三栏，优先两栏以降低实现成本：
 
 1. Session list。
@@ -336,6 +342,45 @@ The timeline rendering rules:
 - Run status renders as human-readable text: `Queued`, `Running`, `Completed`, `Failed`, `Cancelled`.
 - Raw event stream can exist behind a debug disclosure later, but it is not part of default Stage 1 UI.
 - The composer is session-scoped. Starting a run appends a user message and disables overlapping sends until the active run reaches a terminal status.
+
+### Cursor UI projection model
+
+Cursor SDK 没有 OpenCode 那套完整 `message.part` schema，所以前端应在 app 层建立轻量 projection：
+
+```ts
+type TimelineItem =
+  | { kind: 'user'; id: string; runId?: string; text: string; status: 'sent' | 'failed' }
+  | { kind: 'assistant'; id: string; runId?: string; text: string; status: 'streaming' | 'completed' | 'failed' }
+  | { kind: 'thinking'; id: string; runId?: string; text: string; status: 'streaming' | 'completed' }
+  | { kind: 'tool'; id: string; runId?: string; callId: string; name: string; status: 'running' | 'completed' | 'error'; summary?: string; detail?: unknown }
+  | { kind: 'status'; id: string; runId?: string; text: string; tone: 'muted' | 'running' | 'success' | 'error' };
+```
+
+Projection rules:
+
+- Initial state comes from `GET /api/sessions`, `GET /api/sessions/:id/messages`, and `GET /api/sessions/:id/runs`.
+- Submitting a prompt creates an optimistic `user` item and opens `/api/runs/:id/events`.
+- `assistant.delta` appends to the current assistant item for that run, creating it if needed.
+- `thinking.delta` appends to the current thinking item for that run; it is visually subdued and labelled as activity/reasoning, not raw chain-of-thought.
+- `tool.started` creates or updates a running tool item and keeps it expanded.
+- `tool.completed` collapses the matching tool item to a compact summary.
+- `tool.error` marks the matching tool item red and expanded.
+- `task.updated` creates a status/activity row unless it duplicates the current tool/thinking row.
+- `run.status` updates run badges and creates human-readable status rows for queued/running/completed/failed/cancelled.
+- `run.result` completes assistant item if present; if result text is distinct from accumulated assistant text, append a final assistant item.
+
+The raw SSE event list should be removed from the default UI. If needed for debugging, put it behind a `Debug events` disclosure later.
+
+### Implementation slice for the next frontend commit
+
+The next frontend commit should prioritize functional shape over polish:
+
+1. Replace the single-column launcher with an app shell: fixed sidebar + main chat area.
+2. Sidebar lists sessions with title, status, latest run id/status, and a `New conversation` button.
+3. Main chat area shows selected session header, timeline, and sticky composer.
+4. Timeline renders user/assistant/thinking/tool/status items from a frontend projection derived from current messages, runs, and live events.
+5. Existing `Start Cursor run` becomes `Send` in the composer. It remains session-scoped and disallows overlapping active runs.
+6. The previous session cards/runs/event stream panels can be removed or demoted into debug information.
 
 Visual design still follows `docs/design.md`, but design polish happens after the functional chat shape exists. A GLM critique should run after this UI is implemented, then P0/P1 critique items can be applied in a separate commit.
 
