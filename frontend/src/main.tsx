@@ -21,6 +21,14 @@ import {
   startSessionRun
 } from './api';
 import { MarkdownContent } from './MarkdownContent';
+import {
+  effectiveSidebarActivityAt,
+  isSidebarSessionUnread,
+  loadSessionReadAckFromStorage,
+  maxIso,
+  persistSessionReadAckToStorage,
+  sidebarSessionsSorter
+} from './sessionSidebar';
 import { buildTimeline, flattenJsonForDisplay, shortRunId } from './timeline';
 import type { TimelineItem } from './timeline';
 import './styles.css';
@@ -57,14 +65,44 @@ export function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const eventSourcesRef = useRef<Map<string, EventSource>>(new Map());
   const sessionEventsCacheRef = useRef<Map<string, AppEvent[]>>(new Map());
+  const sessionActivityOverlayRef = useRef<Record<string, string>>({});
   const eventsRef = useRef<AppEvent[]>([]);
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const runsRef = useRef<RunProjection[]>(runs);
   runsRef.current = runs;
 
+  const [sessionActivityOverlay, setSessionActivityOverlay] = useState<Record<string, string>>({});
+  const [sessionReadAckById, setSessionReadAckById] = useState<Record<string, string>>(loadSessionReadAckFromStorage);
+
   const activeRun = runs.find((run) => run.status === 'queued' || run.status === 'running');
+  const sidebarSessionsOrdered = useMemo(
+    () => sidebarSessionsSorter(sessions, sessionActivityOverlay),
+    [sessions, sessionActivityOverlay]
+  );
   const timelineItems = useMemo(() => buildTimeline(messages, runs, events), [messages, runs, events]);
+
+  useEffect(() => {
+    sessionActivityOverlayRef.current = sessionActivityOverlay;
+  }, [sessionActivityOverlay]);
+
+  useEffect(() => {
+    setSessionReadAckById((prev) => {
+      let changed = false;
+      const nextMap = { ...prev };
+      for (const projection of sessions) {
+        if (nextMap[projection.id] === undefined) {
+          nextMap[projection.id] = projection.updatedAt;
+          changed = true;
+        }
+      }
+      if (!changed) {
+        return prev;
+      }
+      persistSessionReadAckToStorage(nextMap);
+      return nextMap;
+    });
+  }, [sessions]);
 
   async function loadSessionState(nextSession: SessionProjection): Promise<RunProjection[]> {
     const [nextRuns, nextMessages] = await Promise.all([
@@ -142,11 +180,20 @@ export function App() {
     if (previousSessionId !== undefined) {
       sessionEventsCacheRef.current.set(previousSessionId, [...eventsRef.current]);
     }
-    window.localStorage.setItem(SESSION_STORAGE_KEY, nextSession.id);
     eventSourcesRef.current.forEach((source) => source.close());
     eventSourcesRef.current.clear();
-    const nextRuns = await loadSessionState(nextSession);
-    setEvents(sessionEventsCacheRef.current.get(nextSession.id) ?? []);
+    const refreshedProjection = await getSession(nextSession.id);
+    window.localStorage.setItem(SESSION_STORAGE_KEY, refreshedProjection.id);
+    const overlay = sessionActivityOverlayRef.current;
+    const readAck = maxIso(new Date().toISOString(), effectiveSidebarActivityAt(refreshedProjection, overlay));
+    setSessionReadAckById((prev) => {
+      const nextMap = { ...prev, [refreshedProjection.id]: readAck };
+      persistSessionReadAckToStorage(nextMap);
+      return nextMap;
+    });
+    const nextRuns = await loadSessionState(refreshedProjection);
+    setSessions((currentSessions) => upsertSession(currentSessions, refreshedProjection));
+    setEvents(sessionEventsCacheRef.current.get(refreshedProjection.id) ?? []);
     reconnectStreamingRuns(nextRuns);
   }
 
@@ -200,6 +247,10 @@ export function App() {
     sessionId: string,
     patch: Partial<Pick<SessionProjection, 'status' | 'latestRunId' | 'updatedAt'>>
   ): void {
+    const nextUpdatedAt = patch.updatedAt;
+    if (typeof nextUpdatedAt === 'string' && nextUpdatedAt.length > 0) {
+      bumpSessionActivityAt(sessionId, nextUpdatedAt);
+    }
     setSession((currentSession) =>
       currentSession !== null && currentSession.id === sessionId ? { ...currentSession, ...patch } : currentSession
     );
@@ -209,6 +260,16 @@ export function App() {
         return currentSessions;
       }
       return upsertSession(currentSessions, { ...existing, ...patch });
+    });
+  }
+
+  function bumpSessionActivityAt(sessionId: string, iso: string): void {
+    setSessionActivityOverlay((previousOverlay) => {
+      const merged = maxIso(previousOverlay[sessionId] ?? '', iso);
+      if ((previousOverlay[sessionId] ?? '') === merged) {
+        return previousOverlay;
+      }
+      return { ...previousOverlay, [sessionId]: merged };
     });
   }
 
@@ -256,6 +317,9 @@ export function App() {
   }
 
   function applyRunEvent(event: AppEvent): void {
+    if (event.type !== 'heartbeat' && event.type !== 'tool.delta') {
+      bumpSessionActivityAt(event.sessionId, event.createdAt);
+    }
     setEvents((currentEvents) => appendTimelineEvents(currentEvents, event));
     const payload = event.payload;
     if (event.type === 'run.status' && isRunStatusPayload(payload)) {
@@ -351,20 +415,47 @@ export function App() {
           {sessions.length === 0 ? (
             <p className="empty sidebar-empty">No conversations yet.</p>
           ) : (
-            sessions.map((candidate) => (
+            sidebarSessionsOrdered.map((candidate) => {
+              const showRunning = candidate.status === 'running';
+              const unread = isSidebarSessionUnread({
+                session: candidate,
+                activityOverlayBySessionId: sessionActivityOverlay,
+                selectedSessionId: session?.id,
+                readAckBySessionId: sessionReadAckById
+              });
+              const showUnreadDot = !showRunning && unread;
+              return (
               <button
                 type="button"
                 key={candidate.id}
                 className={`session-row ${candidate.id === session?.id ? 'session-row-active' : ''}`}
+                aria-busy={showRunning ? true : undefined}
+                aria-label={
+                  `${candidate.title}, ${candidate.status === 'idle' ? 'ready' : candidate.status}` +
+                  (showRunning ? ', run in progress' : '') +
+                  (showUnreadDot ? ', unread' : '')
+                }
                 onClick={() => void selectSession(candidate)}
               >
-                <span className="session-row-title">{candidate.title}</span>
+                <div className="session-row-title-row">
+                  <span className="session-row-dot-slot">
+                    {showRunning ? (
+                      <span className="session-row-dot session-row-dot-running" title="Run in progress" />
+                    ) : showUnreadDot ? (
+                      <span className="session-row-dot session-row-dot-unread" title="Unread activity" />
+                    ) : (
+                      <span className="session-row-dot-spacer" aria-hidden="true" />
+                    )}
+                  </span>
+                  <span className="session-row-title">{candidate.title}</span>
+                </div>
                 <span className="session-row-meta">
                   {candidate.status === 'idle' ? 'ready' : candidate.status}
                   {candidate.latestRunId ? ` · ${shortRunId(candidate.latestRunId)}` : ''}
                 </span>
               </button>
-            ))
+            );
+            })
           )}
         </nav>
       </aside>

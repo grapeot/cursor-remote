@@ -8,6 +8,7 @@ import type { StartRunResponse } from '../../src/shared/contracts';
 import type { RunProjection, SessionProjection } from '../../src/shared/projections';
 import { App } from './main';
 import * as api from './api';
+import { SESSION_READ_ACK_STORAGE_KEY } from './sessionSidebar';
 
 vi.mock('./api', () => ({
   fetchHealth: vi.fn(),
@@ -168,6 +169,9 @@ describe('App chat client', () => {
       title: 'Beta'
     };
     vi.mocked(api.listSessions).mockResolvedValue([sessionFixture, sessionBeta]);
+    vi.mocked(api.getSession).mockImplementation((id: string) =>
+      Promise.resolve(id === sessionBeta.id ? sessionBeta : sessionFixture)
+    );
 
     render(<App />);
     await waitFor(() => expect(api.listSessions).toHaveBeenCalled());
@@ -269,6 +273,78 @@ describe('App chat client', () => {
     });
     await waitFor(() => expect(sessionRow.textContent).toMatch(/failed/i));
     expect(MockEventSource.latest().closed).toBe(true);
+  });
+
+  it('lists conversations by declining activity time and shows unread until the conversation is opened', async () => {
+    const alpha: SessionProjection = {
+      ...sessionFixture,
+      id: 'session-alpha',
+      title: 'Alpha',
+      updatedAt: '2026-05-01T10:00:00.000Z'
+    };
+    const beta: SessionProjection = {
+      ...sessionFixture,
+      id: 'session-beta',
+      title: 'Beta',
+      updatedAt: '2026-05-01T14:00:00.000Z'
+    };
+
+    vi.mocked(api.listSessions).mockResolvedValue([alpha, beta]);
+    vi.mocked(api.getSession).mockImplementation((id: string) =>
+      Promise.resolve(id === beta.id ? beta : alpha)
+    );
+
+    window.localStorage.setItem(
+      SESSION_READ_ACK_STORAGE_KEY,
+      JSON.stringify({ 'session-beta': '2026-05-01T11:30:00.000Z' })
+    );
+
+    render(<App />);
+    await waitFor(() => expect(api.listSessions).toHaveBeenCalled());
+
+    const nav = screen.getByRole('navigation', { name: 'Conversations' });
+    const rows = within(nav).getAllByRole('button');
+    expect(rows[0].textContent).toMatch(/Beta/);
+    expect(rows[1].textContent).toMatch(/Alpha/);
+
+    const betaRow = within(nav).getByRole('button', { name: /Beta/ });
+    expect(betaRow.querySelector('.session-row-dot-unread')).toBeTruthy();
+
+    await userEvent.click(betaRow);
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Beta' })).toBeTruthy());
+    await waitFor(() => expect(within(nav).getByRole('button', { name: /Beta/ }).querySelector('.session-row-dot-unread')).toBeNull());
+  });
+
+  it('shows only the running indicator when unread would also apply', async () => {
+    const alpha: SessionProjection = {
+      ...sessionFixture,
+      id: 'session-alpha',
+      title: 'Alpha',
+      updatedAt: '2026-05-01T10:00:00.000Z'
+    };
+    const betaBusy: SessionProjection = {
+      ...sessionFixture,
+      id: 'session-beta',
+      title: 'Beta',
+      status: 'running',
+      updatedAt: '2026-05-01T14:00:00.000Z'
+    };
+
+    vi.mocked(api.listSessions).mockResolvedValue([alpha, betaBusy]);
+    vi.mocked(api.getSession).mockImplementation((id: string) =>
+      Promise.resolve(id === betaBusy.id ? betaBusy : alpha)
+    );
+    window.localStorage.setItem(
+      SESSION_READ_ACK_STORAGE_KEY,
+      JSON.stringify({ 'session-beta': '2026-05-01T11:30:00.000Z' })
+    );
+
+    render(<App />);
+    await waitFor(() => expect(api.listSessions).toHaveBeenCalled());
+    const nav = screen.getByRole('navigation', { name: 'Conversations' });
+    const betaRow = within(nav).getByRole('button', { name: /Beta/ });
+    await waitFor(() => expect(betaRow.querySelector('.session-row-dot-running')).toBeTruthy());
+    expect(betaRow.querySelector('.session-row-dot-unread')).toBeNull();
   });
 });
 

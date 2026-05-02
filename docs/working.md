@@ -51,7 +51,13 @@
 - 切换会话时用 `sessionId → AppEvent[]` 内存快照保留每个会话最近一次留在前端的 streamed 事件，避免回来时 `tool`/thinking（仅存在于 live buffer）被 `setEvents([])` 清空；回到仍在跑的会话时对 `queued`/`running` 的 run 重新打开 `/api/runs/:id/events`。
 - Tool 在聊天时间线中改为可折叠卡片：默认仅显示工具名与状态；展开后以 `key: JSON` 形式的扁平化键值行展示参数，结果文案在展开区内。
 
-### 2026-05-02
+### 2026-05-02 (sidebar activity + stream diagnosis)
+
+- Conversation list is **sorted by effective activity time** (server `SessionProjection.updatedAt` merged with streamed event timestamps where the list would otherwise lag body text).
+- Sidebar **status dots**: green = session `running`, blue = **unread** (projection activity newer than last opened ack for that id). Running wins when both apply. Opening a conversation **stores a read ack** in localStorage (`sessionSidebar` helpers) so blue clears without server support for per-tab unread counts.
+- `selectSession` now **hydrates via `GET /sessions/:id`** (`getSession`), **upserts** the refreshed row into `sessions`, and aligns read ack logic with that projection. Multi-session frontend tests stub `getSession` by session id accordingly.
+- **Streaming UI anomalies**: definitive root cause still depends on reproducible frontend logs plus (ideally) a **narrow `EventSource` wrapper** logging `lastEventId`, `readyState`, `type`, and truncated `MessageEvent.data` on every message and error. Next dynamic step once logs land: correlate disconnects (`onerror`), missing `assistant.delta`, or reorder bugs in `buildTimeline`; consider an opt-in **`?sseDebug=1`** flag or mirrored events in-memory buffer for screenshots.
+- Tests: **`frontend/src/sessionSidebar.test.ts`** (pure sidebar math), **`App.test.tsx`** (sort + unread + running-only dot), existing tool-card switch test updated for `getSession` routing.
 
 - `/api/health` 在已配置 `CURSOR_LOCAL_CWD` 时额外返回 **`localCwd`**（绝对路径）；不含 API key。
 - Assistant 气泡：使用 **`react-markdown`** + **`remark-gfm`** 将模型返回的 Markdown 渲染为安全 HTML（不启用原始 HTML passthrough）；内容仅空白时使用 `markdown-body--empty` 占位。
