@@ -23,7 +23,7 @@ If `CURSOR_API_KEY` in `.env` is a secret reference (for example `op://dev/dev-a
 1. Set `CURSOR_RUNTIME=local` and `CURSOR_LOCAL_CWD` to the **absolute path of this project root** (the folder that contains `mvp_sandbox/`).
 2. Configure `CURSOR_API_KEY` (plaintext or `op://…` reference).
 3. Start the stack (`npm run dev:op` if the key uses 1Password references).
-4. In the UI click **Run MVP: Python hello world**, or edit the prompt and use **Start Cursor run**. The backend waits for the SDK run to finish and shows `completed` or `failed`.
+4. In the UI click **Run MVP: Python hello world**, or edit the prompt and use **Start Cursor run**. The backend queues the run immediately and streams app events back to the browser over SSE.
 5. Confirm the file exists and runs: `python3 mvp_sandbox/hello_world.py` → `Hello, world!`
 
 CLI shortcut (same SDK path as the server, no browser):
@@ -53,7 +53,7 @@ Cloud mode is still useful as a comparison path, but it is not the primary valid
 1. Create or obtain a Cursor API key from Cursor's account / developer settings.
 2. Put it in `.env` as `CURSOR_API_KEY=...`.
 3. Set `CURSOR_RUNTIME=cloud`.
-4. Set `CURSOR_DEFAULT_REPO_URL=https://github.com/<owner>/<repo>` or enter a repo URL in the UI.
+4. Set `CURSOR_DEFAULT_REPO_URL=https://github.com/<owner>/<repo>`.
 5. Restart `npm run dev` and submit a prompt.
 
 The frontend never receives the Cursor API key. It only talks to this project's local `/api/*` endpoints.
@@ -69,15 +69,16 @@ npm run build
 
 ## Current scope
 
-- Create a run from a prompt.
-- List locally known runs.
+- Create or resume a session in the browser.
+- Create a session-scoped run from a prompt without blocking the HTTP response.
+- Stream run lifecycle events to the browser over SSE.
+- List session-scoped runs and messages from server-side projections.
 - Use mock mode without credentials.
 - Keep a typed server-side seam for Cursor SDK calls.
 - Support both `local` and `cloud` runtime configuration, with local runtime as the target product path.
 
 Not implemented yet:
 
-- Streaming Cursor run events to the browser.
 - Reconnecting to an existing Cursor run after server restart.
 - Fetching diffs, file changes, or PR URLs from completed runs.
 - User auth for exposing this service beyond localhost.
