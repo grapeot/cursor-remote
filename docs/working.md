@@ -32,6 +32,8 @@
 - 工作节奏：Stage 1 按小 milestone 实现。每个 milestone 完成后更新 `working.md`，跑 typecheck/test/build，单独 commit，再进入下一个 milestone。
 - Milestone 1 completed: added typed app event contracts, injectable clock/id helpers, in-memory `EventStore`, in-memory `ProjectionStore`, and deterministic tests for event replay, session/run/message projection, and lifecycle integration.
 - Design review started after Milestone 1: captured the current UI with Playwright, asked GLM 5.1 for critique, and added `docs/design.md` as the visual direction for a premium Cursor remote-control console.
+- UI design pass applied to the current POC: compact console header, environment badges, mono prompt editor, Quick actions container, right-aligned primary action, and compact run timeline rows with shortened run ids.
+- Playwright verification passed for the design pass: final screenshot shows the design direction in-page and console warnings/errors are clear after adding a small SVG favicon.
 
 ## Lessons Learned
 

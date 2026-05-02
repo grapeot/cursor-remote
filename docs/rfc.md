@@ -291,6 +291,8 @@ DiffSummary
 
 OpenCode iOS client 是有价值的交互参考：running tool card 默认展开，完成后收起；thinking 和普通 assistant output 视觉上分开；status text 来自最新 activity，而不只是最终 run state。
 
+Visual design follows `docs/design.md`. The frontend should feel like a premium developer console rather than a generic SaaS form: compact header instead of landing-page hero, environment status badges, mono prompt editor, clear focus rings, restrained indigo/green/gray palette, and compact run timeline rows that hide full UUIDs by default. Stage 1 can apply this to the current launcher before the full three-column UI lands; the later component split should preserve the same design tokens.
+
 ## Evaluation architecture
 
 可测试性要进入接口设计，而不是事后补测试。核心服务必须通过 dependency injection 接收 Cursor gateway、EventStore、Clock、IdGenerator、SandboxCwd 和 DiffProvider。这样同一套 RunService 可以跑三种模式：deterministic mock、recorded event replay、真实 Cursor local sandbox。

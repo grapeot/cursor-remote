@@ -31,6 +31,7 @@ OpenCode 的价值在于 runtime 和 client 分得很清楚：`opencode serve` /
 ### Stage 1 必须有
 
 - React web client，包含 session list、message/activity timeline 和 prompt composer。
+- UI direction follows `docs/design.md`: premium developer console, compact header, environment badges, mono prompt editor, compact run timeline, and restrained Cursor-only visual language.
 - Node/Express backend，持有 `CURSOR_API_KEY`、`CURSOR_RUNTIME=local`、`CURSOR_LOCAL_CWD` 和默认 model。Cloud runtime 可以保留为 SDK 对照实验，但产品路径按 local Cursor remote-control 设计。
 - 默认 self-bootstrapping cwd 指向本 repo：`/Users/grapeot/co/knowledge_working/adhoc_jobs/cursor_cloud_remote_poc`。产品运行时 Cursor 可以编辑这个应用自己；live tests 必须另建一次性 sandbox，避免直接修改真实 repo。
 - `Session` 抽象：用户看到的是一个长期对话，一个 session 可以包含多个 Cursor run。
@@ -87,6 +88,7 @@ Stage 1 验证通过的标准：
 7. Stage 1 的核心模块有可维护的测试覆盖，coverage report 能显示 storage、projection、API、SSE 和 mock gateway 的主要路径被覆盖。
 8. Live Cursor suite 在有 token 时可以客观判断 API 是否可用：`Cursor.me()` / `composer-2` 可用、sandbox 文件被写入、SSE 收到完整 run event、event replay 不丢事件、diff summary 能定位 changed files。
 9. README 清楚解释 `.env` 配置、`HOST=0.0.0.0` 的 Tailscale/LAN 暴露方式、默认 deterministic tests 和 opt-in live Cursor tests。
+10. Playwright screenshot verifies the UI reflects the premium console direction from `docs/design.md`: compact header, badge-based status, non-default form controls, and dense runs list.
 
 ## 风险与约束
 

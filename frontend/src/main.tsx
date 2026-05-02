@@ -66,30 +66,20 @@ function App() {
 
   return (
     <main className="shell">
-      <section className="hero">
-        <p className="eyebrow">Cursor Cloud SDK technical validation</p>
-        <h1>Remote-control style agent launcher</h1>
-        <p>
-          This POC keeps Cursor credentials on the server. Default prompt targets a minimal Python smoke test
-          under <code>mvp_sandbox/</code>. Use <code>CURSOR_RUNTIME=local</code> plus <code>CURSOR_LOCAL_CWD</code>{' '}
-          for a real SDK run.
-        </p>
-      </section>
-
-      <section className="panel status-panel">
+      <header className="console-header">
         <div>
-          <span className="label">Runtime</span>
-          <strong>{health?.runtime ?? 'loading'}</strong>
+          <p className="eyebrow">Cursor Remote Console</p>
+          <h1>Agent launcher</h1>
+          <p className="lede">
+            Server-held Cursor credentials, local repo execution, and a tested path toward streamed agent control.
+          </p>
         </div>
-        <div>
-          <span className="label">Cursor API key</span>
-          <strong>{health?.hasCursorApiKey ? 'configured' : 'missing'}</strong>
+        <div className="status-badges" aria-label="Environment status">
+          <StatusBadge label="Runtime" value={health?.runtime ?? 'loading'} ready={health !== null && health.runtime !== 'mock'} />
+          <StatusBadge label="API" value={health?.hasCursorApiKey ? 'configured' : 'missing'} ready={health?.hasCursorApiKey === true} />
+          <StatusBadge label="CWD" value={health?.localCwdConfigured ? 'set' : 'missing'} ready={health?.localCwdConfigured === true} />
         </div>
-        <div>
-          <span className="label">Local cwd</span>
-          <strong>{health?.localCwdConfigured ? 'set' : 'missing'}</strong>
-        </div>
-      </section>
+      </header>
 
       {health?.runtime === 'local' && !health.localCwdConfigured ? (
         <p className="panel warn">
@@ -99,22 +89,29 @@ function App() {
       ) : null}
 
       <form className="panel form" onSubmit={(event) => void handleSubmit(event)}>
-        <div className="mvp-row">
-          <button
-            type="button"
-            disabled={isSending}
-            onClick={() => void submitRun(MVP_PYTHON_HELLO_PROMPT)}
-          >
-            Run MVP: Python hello world
-          </button>
-          <button type="button" className="secondary" disabled={isSending} onClick={() => setPrompt(MVP_PYTHON_HELLO_PROMPT)}>
-            Fill MVP text only
-          </button>
+        <div className="quick-actions">
+          <div>
+            <span className="label">Quick action</span>
+            <p>Minimal smoke test for the self-bootstrapping repo.</p>
+          </div>
+          <div className="mvp-row">
+            <button
+              type="button"
+              className="outline"
+              disabled={isSending}
+              onClick={() => void submitRun(MVP_PYTHON_HELLO_PROMPT)}
+            >
+              Run Python hello world
+            </button>
+            <button type="button" className="ghost" disabled={isSending} onClick={() => setPrompt(MVP_PYTHON_HELLO_PROMPT)}>
+              Fill prompt
+            </button>
+          </div>
           <span className="muted inline-hint">
-            Writes <code>mvp_sandbox/hello_world.py</code>. Submit below waits until the SDK run finishes (often minutes).
+            Writes <code>mvp_sandbox/hello_world.py</code>. Current POC waits until <code>run.wait()</code> completes.
           </span>
         </div>
-        <label>
+        <label className="prompt-field">
           Prompt
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={8} />
         </label>
@@ -136,9 +133,11 @@ function App() {
             <input value={modelId} onChange={(event) => setModelId(event.target.value)} />
           </label>
         </div>
-        <button type="submit" disabled={isSending || prompt.trim().length === 0}>
-          {isSending ? 'Waiting for Cursor SDK…' : 'Start Cursor run'}
-        </button>
+        <div className="form-footer">
+          <button type="submit" disabled={isSending || prompt.trim().length === 0}>
+            {isSending ? 'Waiting for Cursor SDK…' : 'Start Cursor run'}
+          </button>
+        </div>
         {isSending ? (
           <p className="muted">
             The server blocks until <code>run.wait()</code> completes. This page does not stream progress yet.
@@ -161,8 +160,9 @@ function App() {
             {runs.map((run) => (
               <li key={run.id}>
                 <div className="run-header">
-                  <strong>{run.status}</strong>
-                  <code>{run.id}</code>
+                  <span className={`run-status run-status-${run.status}`}>{run.status}</span>
+                  <span className="run-title">{summarizePrompt(run.prompt)}</span>
+                  <code title={run.id}>{shortRunId(run.id)}</code>
                 </div>
                 <p>{run.prompt}</p>
                 {run.resultText ? <p className="muted">{run.resultText}</p> : null}
@@ -174,6 +174,37 @@ function App() {
       </section>
     </main>
   );
+}
+
+interface StatusBadgeProps {
+  label: string;
+  value: string;
+  ready: boolean;
+}
+
+function StatusBadge({ label, value, ready }: StatusBadgeProps) {
+  return (
+    <span className={`status-badge ${ready ? 'status-badge-ready' : 'status-badge-warn'}`}>
+      <span className="status-dot" aria-hidden="true" />
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </span>
+  );
+}
+
+function shortRunId(id: string): string {
+  if (id.length <= 18) {
+    return id;
+  }
+  return `${id.slice(0, 8)}…${id.slice(-6)}`;
+}
+
+function summarizePrompt(value: string): string {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (normalized.includes('hello_world.py')) {
+    return 'create hello_world.py';
+  }
+  return normalized.length > 48 ? `${normalized.slice(0, 45)}…` : normalized;
 }
 
 const root = createRoot(document.getElementById('root') as HTMLElement);
