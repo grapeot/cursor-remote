@@ -46,7 +46,7 @@ print("Hello, world!")
 
 Use nothing else in that file (no shebang, no imports). If mvp_sandbox/ does not exist, create it.`;
 
-const SESSION_STORAGE_KEY = 'cursor-cloud-remote-poc.sessionId';
+const SESSION_STORAGE_KEY = 'cursor-remote.sessionId';
 
 function sessionStatusFromRunStatus(status: AppRunStatus): SessionStatus {
   if (status === 'queued' || status === 'running') {

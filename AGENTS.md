@@ -1,4 +1,4 @@
-# cursor_cloud_remote_poc local notes
+# Cursor Remote — local notes
 
 This project is a technical validation for a Cursor Cloud SDK remote-control style web app.
 

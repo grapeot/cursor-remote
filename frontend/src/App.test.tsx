@@ -36,7 +36,7 @@ describe('App chat client', () => {
       runtime: 'local',
       hasCursorApiKey: true,
       localCwdConfigured: true,
-      localCwd: '/tmp/cursor-poc-cwd'
+      localCwd: '/tmp/cursor-remote-test-cwd'
     });
     vi.mocked(api.listSessions).mockResolvedValue([sessionFixture]);
     vi.mocked(api.getSession).mockResolvedValue(sessionFixture);

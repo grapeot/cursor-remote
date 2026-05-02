@@ -1,6 +1,6 @@
 import type { SessionProjection } from '../../src/shared/projections';
 
-export const SESSION_READ_ACK_STORAGE_KEY = 'cursor-cloud-remote-poc.sessionReadAck';
+export const SESSION_READ_ACK_STORAGE_KEY = 'cursor-remote.sessionReadAck';
 
 export function loadSessionReadAckFromStorage(): Record<string, string> {
   if (typeof window === 'undefined') {
