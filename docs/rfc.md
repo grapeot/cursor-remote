@@ -2,18 +2,21 @@
 
 ## 决策
 
-把当前 prototype 从阻塞式 run launcher 演进成 Cursor-only remote-control server + web client。
+把当前 prototype 从阻塞式 run launcher / event monitor 演进成 Cursor-only remote-control server + OpenCode-like web coding client。
 
 技术栈继续使用 Node + Express + TypeScript，因为 `@cursor/sdk` 是 TypeScript-first。前端继续使用 React + Vite。核心架构变化是产品模型：`Session -> Run -> Event`。SSE 负责实时更新，append-only event log 作为 replay 和 UI projection 的事实来源。测试设计和产品模型一起推进：每个核心接口都要有 deterministic mock 测试和可选 live Cursor 验证路径。
 
-系统应该借鉴 OpenCode 的 server/client 分层，但不做 OpenCode API 兼容，也不做 provider connector 平台。OpenCode 暴露的是完整 coding-agent runtime：sessions、message parts、files、diffs、permissions、TUI control、providers 和 global events。Cursor 已经有自己的 runtime primitives：`Agent`、`Run`、`SDKMessage`、local execution、stream events 和 `Agent.resume()`。这个 app 要做的是把 Cursor primitives 翻译成一套面向 web client 的小协议。
+系统应该借鉴 OpenCode 的 server/client 分层和 client 体验，但不做 OpenCode API 兼容，也不做 provider connector 平台。OpenCode 暴露的是完整 coding-agent runtime：sessions、message parts、tool calls、files、diffs、permissions、TUI control、providers 和 global events。Cursor 已经有自己的 runtime primitives：`Agent`、`Run`、`SDKMessage`、local execution、stream events 和 `Agent.resume()`。这个 app 要做的是把 Cursor primitives 翻译成一套面向 web coding client 的小协议，并把 agent 工作渲染成 chat timeline，而不是把 raw SSE events 展示给用户。
 
 ## 架构
 
 ```text
 Browser React app
+  ├── Conversation sidebar: sessions and run state
+  ├── Chat timeline: user, assistant, thinking, tool cards, status
+  ├── Prompt composer: sends follow-up prompts to active session
   ├── REST: sessions, messages, runs, health
-  └── SSE: live run events and replay
+  └── SSE: live run events and replay, rendered as timeline parts
 
 Node/Express server
   ├── config: .env only for Cursor key, host, port, local cwd, model
@@ -34,7 +37,7 @@ Node/Express server
   └── Agent.resume(agentId) after live validation
 ```
 
-Frontend 永远不直接调用 Cursor。Backend 持有 API key、SDK lifecycle、本地文件系统访问和 stream conversion。Frontend 只渲染 server state projection。
+Frontend 永远不直接调用 Cursor。Backend 持有 API key、SDK lifecycle、本地文件系统访问和 stream conversion。Frontend 只渲染 server state projection。默认用户界面应该是 conversation/chat，不是 SDK benchmark，也不是 SSE debug console。
 
 网络边界交给 Tailscale。Stage 1 默认监听 `HOST=0.0.0.0`、`PORT=8787`，让同一 LAN 或 tailnet 内设备可以访问；纯本机调试时可以改成 `HOST=127.0.0.1`。设备身份、ACL 和访问控制由 tailnet 处理。应用层不实现 shared secret、bearer token、OAuth 或多用户权限。应用代码只负责两件安全事项：Cursor API key 不出 server；UI 明确展示当前 cwd、runtime、run 状态和 prompt，降低远程误操作概率。
 
@@ -83,7 +86,7 @@ interface Run {
 
 ### Message
 
-`Message` 是 UI projection，不是底层 storage primitive。User prompt 投影成 user message。Cursor assistant text 和 final result 投影成 assistant message。Tool 和 thinking event 先保留在 activity timeline 里，除非后续证据表明 Cursor 返回了稳定的 message-part 结构，才考虑把它们提升为 message part。
+`Message` 是 UI projection，不是底层 storage primitive。User prompt 投影成 user message。Cursor assistant text 和 final result 投影成 assistant message。Tool、thinking、task/status event 在前端渲染成 timeline parts：thinking block、tool card、status row。不要把 raw event id / raw event type 作为默认 UI。
 
 ```ts
 interface Message {
@@ -227,10 +230,6 @@ interface RawCursorEvent {
 
 Stage 1 使用 `run.stream()`，因为 event envelope 在 `@cursor/sdk@1.0.9` 类型里清楚：`system`、`user`、`assistant`、`tool_call`、`thinking`、`status`、`request`、`task`。如果后续文本更新粒度不够，再把 `agent.send(..., { onDelta })` 作为补充来源，但仍然通过同一个 mapper 输出 app events。
 
-推荐映射：
-
-| Cursor event | App event | UI 用途 |
-|---|---|---|
 | Cursor `SDKMessage` | App event | Payload contract |
 |---|---|---|
 | `status: CREATING/RUNNING` | `run.status` | `{ runId, prompt, runtime, modelId, status: 'running' }` |
@@ -290,7 +289,7 @@ Stage 1/2 都不做应用层 token auth。目标部署方式是 Tailscale：serv
 
 ## 前端架构
 
-随着 API 演进，把当前单文件 `main.tsx` 拆成产品组件：
+当前前端已经证明 session/run/SSE 能工作，但产品形态仍然不对：它更像一个 launcher + raw event monitor。下一步要把它重写成 OpenCode-like web coding client。先允许仍然放在单个 React 入口里实现，但结构上按以下组件边界组织，后续再拆文件：
 
 ```text
 SessionSidebar
@@ -301,28 +300,54 @@ ActivityPanel
 ToolCallCard
 ThinkingBlock
 RunStatusBadge
-DiffSummary
 ```
 
-第一版 UI 应该是三栏：
+第一版 UI 应该是两栏或三栏，优先两栏以降低实现成本：
 
 1. Session list。
-2. Chat/message timeline。
-3. Activity/result panel，展示 thinking、tool calls、status、diff/PR links。
+2. Chat/message timeline + composer。
+3. 可选 Activity panel，展示最近 thinking、tool calls、status。若先不做第三栏，tool/thinking/status 必须内嵌在 chat timeline 里。
 
-OpenCode iOS client 是有价值的交互参考：running tool card 默认展开，完成后收起；thinking 和普通 assistant output 视觉上分开；status text 来自最新 activity，而不只是最终 run state。
+OpenCode iOS client 和 OpenCode official web client 是交互参考：running tool card 默认展开，完成后收起；thinking 和普通 assistant output 视觉上分开；status text 来自最新 activity，而不只是最终 run state。Cursor 版本只复制体验骨架，不复制 provider/auth/permission/diff 的完整产品面。
 
-Visual design follows `docs/design.md`. The frontend should feel like a premium developer console rather than a generic SaaS form: compact header instead of landing-page hero, environment status badges, mono prompt editor, clear focus rings, restrained indigo/green/gray palette, and compact run timeline rows that hide full UUIDs by default. Stage 1 can apply this to the current launcher before the full three-column UI lands; the later component split should preserve the same design tokens.
+### Required Stage 1 screen shape
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ Header: Cursor Remote Console + runtime/API/CWD/session state │
+├───────────────┬──────────────────────────────────────────────┤
+│ Conversations │ Chat timeline                                 │
+│ - session A   │  user prompt                                  │
+│ - session B   │  assistant text                               │
+│ - running...  │  thinking/activity block                      │
+│               │  tool card: write_file running/completed       │
+│               │  run status row / error row                    │
+│               │                                                │
+│               │ Prompt composer                                │
+└───────────────┴──────────────────────────────────────────────┘
+```
+
+The timeline rendering rules:
+
+- User messages render as right-aligned or visually distinct prompt bubbles/cards.
+- Assistant text renders as primary response content, not as raw `assistant.delta` rows.
+- Thinking/activity renders in a subdued block with label such as `Thinking` or `Activity`; do not claim raw chain-of-thought fidelity.
+- Tool calls render as cards. Running cards stay expanded and prominent; completed cards collapse to a one-line summary with name/status; error cards use error color.
+- Run status renders as human-readable text: `Queued`, `Running`, `Completed`, `Failed`, `Cancelled`.
+- Raw event stream can exist behind a debug disclosure later, but it is not part of default Stage 1 UI.
+- The composer is session-scoped. Starting a run appends a user message and disables overlapping sends until the active run reaches a terminal status.
+
+Visual design still follows `docs/design.md`, but design polish happens after the functional chat shape exists. A GLM critique should run after this UI is implemented, then P0/P1 critique items can be applied in a separate commit.
 
 ## Evaluation architecture
 
 可测试性要进入接口设计，而不是事后补测试。核心服务必须通过 dependency injection 接收 Cursor gateway、EventStore、Clock、IdGenerator 和 sandbox cwd。这样同一套 RunService 可以跑三种模式：deterministic mock、recorded event replay、真实 Cursor local sandbox。
 
-默认 `npm test` 跑 deterministic suite，不访问 Cursor API。它验证 app logic：config、request validation、EventStore、ProjectionStore、Cursor stream mapper、EventBroker/SSE、API routes、DiffService、frontend projection 和 mock gateway event sequence。这里的成功判据是纯客观的：event id 单调、projection 一致、SSE replay 不丢事件、HTTP error code 稳定、secret 不出现在 response 或 event payload。
+默认 `npm test` 跑 deterministic suite，不访问 Cursor API。它验证 app logic：config、request validation、EventStore、ProjectionStore、Cursor stream mapper、EventBroker/SSE、API routes、frontend projection 和 mock gateway event sequence。这里的成功判据是纯客观的：event id 单调、projection 一致、SSE replay 不丢事件、HTTP error code 稳定、secret 不出现在 response 或 event payload。
 
 Live Cursor suite 通过 `RUN_CURSOR_LIVE_TESTS=1` 显式开启，模型固定 `composer-2`。测试创建一次性 local sandbox cwd。Live smoke 不做长任务，只验证 API 是否真的可用：`run.stream()` 产生 status/assistant 或 tool/task event，Cursor 能在 sandbox 写入 `hello.txt`，app SSE 能转发这些 event，并且 run 进入 completed/failed terminal state。产品默认 cwd 可以指向真实 repo；live tests 必须覆盖 cwd，避免测试误改真实 workspace。
 
-Live suite 的失败输出要服务 agent 自我诊断。测试摘要应能区分 failure layer：token/account、model availability、SDK schema mismatch、stream timeout、SSE broker、diff baseline、projection。这样 agent 可以判断下一步是修本地代码、更新 fixture，还是标记 Cursor API 当前不可用。
+Live suite 的失败输出要服务 agent 自我诊断。测试摘要应能区分 failure layer：token/account、model availability、SDK schema mismatch、stream timeout、SSE broker、projection。这样 agent 可以判断下一步是修本地代码、更新 fixture，还是标记 Cursor API 当前不可用。
 
 Stage 1 测试矩阵：
 
@@ -355,5 +380,5 @@ Stage 1 测试矩阵：
 3. 用 `POST /api/sessions/:sessionId/runs` 替换 `POST /api/runs`，旧 route 可以短期保留但标记 deprecated。
 4. 增加 SSE event endpoints 和 event broker，并为 replay / reconnect 写测试。
 5. 增加 `CursorStreamMapper`，让真实 Cursor SDK stream 稳定转成 app events，并用 recorded fixtures 覆盖 unknown shape。
-6. 把 frontend 从 run launcher 重构成 session sidebar + timeline + activity panel，同时把 event projection 抽出单测。
+6. 把 frontend 从 run launcher / raw event monitor 重构成 conversations + chat timeline + composer，同时把 event projection 抽出单测。
 7. 保留 mock mode，但让它产出和真实 Cursor mode 相同形状的 event sequence。
