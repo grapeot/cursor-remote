@@ -52,6 +52,7 @@
 - 集成测试与 `App.test.tsx` health mock 覆盖带 `localCwd` 的响应。
 - **Thinking 流式**：`buildTimeline` 按时间排序后对同一 `runId` 的 `thinking.delta` **追加拼接**（不再被 Map 覆盖只留最后一条）；支持 `thinking.completed` 将状态标为 completed。
 - **Tool 卡片**：`tool.started` 与 `tool.completed` **合并**同一 `callId`，完成后仍保留 **args（detail）**；UI 上 **completed/error** 也继续展示 `<pre class="tool-args">`，不再仅在 running 时显示。
+- **Composer 快捷键**：**Enter** 换行；**⌘↵（Meta+Enter）或 Ctrl+Enter** 发送（与 Send 按钮同一套 `submitRun` 校验）；快捷键说明在 Prompt 标题旁，并用 **`aria-describedby`** 关联到 textarea。
 
 ## Lessons Learned
 

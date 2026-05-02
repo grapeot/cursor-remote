@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { SyntheticEvent } from 'react';
+import type { KeyboardEvent, SyntheticEvent } from 'react';
 import type { HealthResponse } from '../../src/shared/contracts';
 import { appEventSchema, isRunErrorPayload, isRunResultPayload, isRunStatusPayload, readStringField } from '../../src/shared/events';
 import type { AppEvent } from '../../src/shared/events';
@@ -153,6 +153,17 @@ export function App() {
   async function handleSubmit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     await submitRun();
+  }
+
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
+    if (event.key !== 'Enter') {
+      return;
+    }
+    if (!(event.metaKey || event.ctrlKey)) {
+      return;
+    }
+    event.preventDefault();
+    void submitRun();
   }
 
   function openRunEvents(runId: string, eventsUrl: string): void {
@@ -333,15 +344,23 @@ export function App() {
               <input value={modelId} onChange={(event) => setModelId(event.target.value)} />
             </label>
           </details>
-          <label className="composer-prompt">
-            <span>Prompt</span>
+          <div className="composer-prompt">
+            <div className="composer-prompt-heading">
+              <label htmlFor="composer-prompt-input">Prompt</label>
+              <span className="muted composer-shortcut-hint" id="composer-shortcut-hint">
+                Enter newline · ⌘↵ or Ctrl+Enter to send
+              </span>
+            </div>
             <textarea
+              id="composer-prompt-input"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
+              onKeyDown={handleComposerKeyDown}
               rows={4}
               placeholder="Ask Cursor to edit, explain, or create code in the configured cwd…"
+              aria-describedby="composer-shortcut-hint"
             />
-          </label>
+          </div>
           <div className="composer-actions">
             {showSmokeActions ? (
               <button type="button" className="ghost" disabled={activeRun !== undefined} onClick={() => setPrompt(MVP_PYTHON_HELLO_PROMPT)}>

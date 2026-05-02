@@ -76,8 +76,7 @@ textarea {
 .muted,
 .empty,
 .timeline-label,
-.session-row-meta,
-.composer label span {
+.session-row-meta {
   color: var(--color-text-secondary);
 }
 
@@ -424,12 +423,30 @@ pre {
   background: var(--color-surface);
 }
 
-.composer label,
+.composer-prompt,
 .composer-model {
   display: grid;
   gap: 7px;
   font-size: 0.82rem;
+}
+
+.composer-prompt-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.composer-prompt label {
+  margin: 0;
   font-weight: 800;
+  color: var(--color-text-secondary);
+}
+
+.composer-shortcut-hint {
+  font-weight: 600;
+  font-size: 0.72rem;
 }
 
 .composer-model {

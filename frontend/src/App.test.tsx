@@ -87,6 +87,38 @@ describe('App chat client', () => {
     expect(screen.getByText('Created hello.txt.')).toBeTruthy();
     expect(MockEventSource.latest().closed).toBe(true);
   });
+
+  it('submits the prompt when pressing Meta+Enter in the textarea', async () => {
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Conversations' })).toBeTruthy();
+    const textarea = screen.getByLabelText('Prompt');
+    await userEvent.clear(textarea);
+    await userEvent.type(textarea, 'Meta enter');
+    await userEvent.keyboard('{Meta>}{Enter}{/Meta}');
+    await waitFor(() =>
+      expect(api.startSessionRun).toHaveBeenCalledWith('session-1', {
+        prompt: 'Meta enter',
+        modelId: 'composer-2',
+        runtime: 'local'
+      })
+    );
+  });
+
+  it('submits the prompt when pressing Ctrl+Enter in the textarea', async () => {
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Conversations' })).toBeTruthy();
+    const textarea = screen.getByLabelText('Prompt');
+    await userEvent.clear(textarea);
+    await userEvent.type(textarea, 'Ctrl enter');
+    await userEvent.keyboard('{Control>}{Enter}{/Control}');
+    await waitFor(() =>
+      expect(api.startSessionRun).toHaveBeenCalledWith('session-1', {
+        prompt: 'Ctrl enter',
+        modelId: 'composer-2',
+        runtime: 'local'
+      })
+    );
+  });
 });
 
 const sessionFixture: SessionProjection = {
