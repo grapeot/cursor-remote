@@ -1,65 +1,88 @@
 # Cursor Remote
 
-This project tests whether Cursor SDK can support a remote-control style experience: a browser UI sends prompts to a small backend running on your Mac, and the backend starts Cursor agent runs without exposing Cursor credentials to the client.
+Browser UI + Node backend experiment: prompts go to a small server on your machine, which drives [`@cursor/sdk`](https://www.npmjs.com/package/@cursor/sdk) agent runs **without putting Cursor credentials in the client**. Mock mode stays on by default so the stack runs before you wire a real key.
 
-The default mode is mock mode, so the app is runnable before a Cursor API key is available.
+**中文版** · [简体说明（跳转到下方](#readme-zh)
+
+## Documentation (source of truth)
+
+Read these **before changing behavior or shipping UI**:
+
+| Doc | Purpose |
+| --- | --- |
+| [`docs/prd.md`](docs/prd.md) | Product goals, staged scope, UX direction (coding chat client, not raw event spam). |
+| [`docs/rfc.md`](docs/rfc.md) | Architecture: `Session → Run → Event`, SSE projections, adapters, rationale vs OpenCode cloning. |
+| [`docs/design.md`](docs/design.md) | Visual / interaction constraints (premium dev console vibe, timeline rendering). |
+| [`docs/test.md`](docs/test.md) | Testing strategy (mock-heavy, optional live Cursor). |
+| [`docs/working.md`](docs/working.md) | Working log / checkpoints. |
+
+Optional context: [`docs/design_critique.md`](docs/design_critique.md).
+
+## Design goals (short version)
+
+The long-form goals live in **`docs/prd.md`** + **`docs/rfc.md`**. In one glance:
+
+1. **OpenCode-shaped client, Cursor-only spine** — Conversations sidebar, timeline, composer; SSE + REST projections; **not** multi-provider adapters.
+2. **Local-first, key on server only** — `CURSOR_API_KEY` stays in `.env` on the host; LAN/Tailscale exposure is intentional; browser never holds the Cursor secret.
+3. **Async runs with replayable projections** — Create runs without blocking HTTP; timeline materializes from modeled events/thinking/tool activity, not a raw SSE dump for end users.
+
+## Prerequisites
+
+- **Node.js** 22+ recommended (matches toolchain in this repo).
+- **npm** (workspaces: root server + `frontend/`).
 
 ## Quick start
 
 ```bash
 npm install
 cp .env.example .env
-# Edit .env: set CURSOR_API_KEY from Cursor account / developer settings (see below).
+# Set CURSOR_API_KEY when leaving mock mode (see below).
 npm run dev
 ```
 
-Open `http://localhost:5177`. The backend listens on `http://localhost:8787`.
+- Web client: **`http://localhost:5177`**
+- API / SSE backend: **`http://localhost:8787`**
 
-### API key
+Frontend dev-server proxy: set **`CURSOR_REMOTE_VITE_API_ORIGIN=http://localhost:<backend-port>`** if the backend is not on 8787.
 
-1. Create or obtain a **Cursor API key** from Cursor’s account / developer settings.
-2. Put it in `.env` as `CURSOR_API_KEY=…` (plaintext is fine for local dev).
+## Configuration
 
-Optional: store the secret in **1Password** (or another manager) and inject it when you launch Node. Example only — vault and item names are fictional:
+Copy **`.env.example`** → **`.env`**. Sensitive values must not be committed.
+
+| Variable | Role |
+| --- | --- |
+| `CURSOR_API_KEY` | Required for live Cursor SDK; omit or use mocks for playground. |
+| `CURSOR_RUNTIME` | `mock` \| `local` \| `cloud` — **`mock`** keeps everything runnable offline. |
+| `CURSOR_LOCAL_CWD` | Repo path the agent sees when `CURSOR_RUNTIME=local` (`.` = repo root with `mvp_sandbox/` etc.). |
+| `CURSOR_DEFAULT_REPO_URL` | Cloud runs: `https://github.com/<owner>/<repo>`. |
+
+Optional secret managers (illustrative only):
 
 ```bash
-# Illustration: substitute your own vault/item path and CLI.
-CURSOR_API_KEY="op://AcmeCorp Dev Vault/Example Item/api_token" npm run dev
+CURSOR_API_KEY="$(op read 'op://YourVault/ExampleItem/credential')" npm run dev
 ```
 
-If you are not using a secret manager, you do not need that step; just paste the API key into `.env`.
+Mock mode skips that entirely.
 
-### Minimal MVP (Python hello world)
+### Minimal MVP (Python hello, local SDK)
 
-1. Set `CURSOR_RUNTIME=local` and `CURSOR_LOCAL_CWD=.` (repo root — the folder that contains `mvp_sandbox/`), or another path relative to where you start the backend.
-2. Ensure `CURSOR_API_KEY` is set in `.env`.
-3. Start the stack with `npm run dev`.
-4. In the UI, use **Fill Python hello world prompt** / **Use smoke prompt** (mock mode), or paste your task and **Send**.
-5. Confirm the file exists and runs: `python3 mvp_sandbox/hello_world.py` → `Hello, world!`
+1. `CURSOR_RUNTIME=local`, `CURSOR_LOCAL_CWD=.` (or another cwd), `CURSOR_API_KEY` set.
+2. `npm run dev`, send prompt or use bundled smoke prompt.
+3. Check `mvp_sandbox/hello_world.py`: `python3 mvp_sandbox/hello_world.py` → `Hello, world!`
 
-CLI shortcut (same SDK path as the server, no browser):
+CLI without browser:
 
 ```bash
 npm run mvp:run
 ```
 
-Loads `.env` via `dotenv` (see `scripts/run_mvp_once.ts`).
+## Runtime modes at a glance
 
-## Real local Cursor SDK validation
-
-The Node backend runs on the machine that holds your checkout, so Cursor SDK can access local files through `CURSOR_LOCAL_CWD`.
-
-1. Set `CURSOR_API_KEY`, `CURSOR_RUNTIME=local`, and `CURSOR_LOCAL_CWD` (`.` or another directory).
-2. Restart `npm run dev` and submit a prompt.
-
-The browser only talks to this backend. If you expose it beyond localhost, use your own tunnel or VPN (for example Tailscale); do not put the Cursor key in the client.
-
-## Real cloud Cursor SDK validation
-
-Comparison path — not primary for local-file remote control.
-
-1. Set `CURSOR_RUNTIME=cloud` and `CURSOR_DEFAULT_REPO_URL=https://github.com/<owner>/<repo>`.
-2. Restart `npm run dev` and submit a prompt.
+| Mode | When to use |
+| --- | --- |
+| **`mock`** | Default demos, deterministic UI/tests, CI. |
+| **`local`** | Real SDK against local checkout — primary product path per PRD/RFC. |
+| **`cloud`** | Cursor cloud agent + GitHub repo; comparison path only. |
 
 ## Commands
 
@@ -68,20 +91,55 @@ npm run typecheck
 npm test
 npm run coverage
 npm run build
+npm run lint
 ```
 
-## Current scope
+Production-style entry after `npm run build`:
 
-- Create or resume a session in the browser.
-- Create a session-scoped run from a prompt without blocking the HTTP response.
-- Stream run lifecycle events to the browser over SSE.
-- List session-scoped runs and messages from server-side projections.
-- Use mock mode without credentials.
-- Keep a typed server-side seam for Cursor SDK calls.
-- Support both `local` and `cloud` runtime configuration, with local runtime as the target product path.
+```bash
+npm start   # serves dist/server
+```
 
-Not implemented yet:
+GitHub Actions **CI** (`typecheck`, `test`, `build`) runs on pushes and PRs to `master`.
 
-- Reconnecting to an existing Cursor run after server restart.
-- Fetching diffs, file changes, or PR URLs from completed runs.
-- User auth for exposing this service beyond localhost.
+## Security posture
+
+Assume **Tailscale/VPN/LAN**, not anonymous internet. Authenticate networks yourself; application-layer multi-user OAuth is explicitly out of scope for now (see `docs/prd.md`).
+
+<div id="readme-zh"></div>
+
+## 中文版
+
+（默认以英文为主体；本节为中文速览；细节仍以 `docs/` 为准。）
+
+**英文版**：[回到文档索引与英文说明](#cursor-remote)
+
+### 项目做什么
+
+用小型的 **Node + Express** 服务端持有 **Cursor API key**，浏览器只跟自己的后端通讯，通过 SSE 等手段把会话、运行状态和聊天时间轴推到前端。**默认 mock**，无 key 也可跑。
+
+### 设计目标（简述）
+
+完整叙述见 **`docs/prd.md`**、**`docs/rfc.md`**：**单用户、local-first、只服务 Cursor**，产品形态对齐 OpenCode 式 coding client（侧边会话 + 时间轴 + 输入框），用 Session / Run / Event 模型异步驱动；不把原始 SSE 当主界面；短期不做多 provider connector。
+
+### 文档导航
+
+| 文件 | 内容 |
+| --- | --- |
+| [`docs/prd.md`](docs/prd.md) | 产品与阶段需求 |
+| [`docs/rfc.md`](docs/rfc.md) | 架构与协议取舍 |
+| [`docs/design.md`](docs/design.md) | UI/视觉方向 |
+| [`docs/test.md`](docs/test.md) | 测试策略 |
+| [`docs/working.md`](docs/working.md) | 工作备忘 |
+
+### 快速使用
+
+```bash
+npm install
+cp .env.example .env
+npm run dev
+```
+
+浏览器：`http://localhost:5177`；后端：`http://localhost:8787`。要离开 mock：`CURSOR_API_KEY`、`CURSOR_RUNTIME=local`、`CURSOR_LOCAL_CWD`。云端对比路径：`CURSOR_RUNTIME=cloud` + `CURSOR_DEFAULT_REPO_URL`。
+
+常用命令：`npm run typecheck`、`npm test`、`npm run build`。合并到 **`master`** 后 GitHub Actions 会跑同样检查。
