@@ -82,6 +82,7 @@ describe('App chat client', () => {
     expect(screen.getByText('Inspecting workspace.')).toBeTruthy();
     expect(screen.getByText('write_file')).toBeTruthy();
     expect(screen.getByText('Wrote hello.txt')).toBeTruthy();
+    expect(screen.getByText(/"path": "hello.txt"/)).toBeTruthy();
     expect(screen.getByText(/Cursor · completed ·/)).toBeTruthy();
     expect(screen.getByText('Created hello.txt.')).toBeTruthy();
     expect(MockEventSource.latest().closed).toBe(true);

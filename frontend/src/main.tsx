@@ -397,8 +397,8 @@ function TimelineItemView({ item }: { item: TimelineItem }) {
           <strong>{item.name}</strong>
           <span className="tool-status">{item.status}</span>
         </div>
-        {item.summary ? <p>{item.summary}</p> : null}
-        {item.status === 'running' && item.detail !== undefined ? <pre>{formatDetail(item.detail)}</pre> : null}
+        {item.detail !== undefined ? <pre className="tool-args">{formatDetail(item.detail)}</pre> : null}
+        {item.summary !== undefined ? <p className="tool-result">{item.summary}</p> : null}
       </article>
     );
   }

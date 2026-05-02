@@ -31,15 +31,60 @@ describe('chat timeline projection', () => {
     expect(buildTimeline(messages, runs, events)).toMatchObject([
       { kind: 'user', text: 'Create hello.txt', status: 'sent' },
       { kind: 'thinking', text: 'Checking files.' },
-      { kind: 'tool', name: 'write_file', status: 'completed', summary: 'Wrote hello.txt' },
+      { kind: 'tool', name: 'write_file', status: 'completed', summary: 'Wrote hello.txt', detail: { path: 'hello.txt' } },
       { kind: 'assistant', text: 'Done.', status: 'completed' },
       { kind: 'status', text: 'Run run-1234…abcdef is completed', tone: 'success' }
     ]);
   });
 
-  it('ignores empty thinking deltas and renders run errors as timeline status', () => {
+  it('appends successive thinking.delta chunks for the same run', () => {
+    const events: AppEvent[] = [
+      event({ id: 1, type: 'thinking.delta', payload: { text: 'Step A. ' }, createdAt: '2026-05-01T10:00:01.000Z' }),
+      event({ id: 2, type: 'thinking.delta', payload: { text: 'Step B.' }, createdAt: '2026-05-01T10:00:02.000Z' }),
+      event({ id: 3, type: 'thinking.completed', payload: {}, createdAt: '2026-05-01T10:00:03.000Z' })
+    ];
+    const timeline = buildTimeline([], [], events);
+    const thinking = timeline.find((item) => item.kind === 'thinking');
+    expect(thinking).toMatchObject({ kind: 'thinking', text: 'Step A. Step B.', status: 'completed' });
+  });
+
+  it('merges tool.started args into tool.completed so detail survives completion', () => {
+    const events: AppEvent[] = [
+      event({
+        id: 1,
+        type: 'tool.started',
+        payload: { callId: 'c1', name: 'bash', args: { cmd: 'ls' } },
+        createdAt: '2026-05-01T10:00:01.000Z'
+      }),
+      event({
+        id: 2,
+        type: 'tool.completed',
+        payload: { callId: 'c1', name: 'bash', result: 'ok' },
+        createdAt: '2026-05-01T10:00:02.000Z'
+      })
+    ];
+    const tool = buildTimeline([], [], events).find((item) => item.kind === 'tool');
+    expect(tool).toMatchObject({
+      kind: 'tool',
+      status: 'completed',
+      summary: 'ok',
+      detail: { cmd: 'ls' }
+    });
+  });
+
+  it('eventToTimelineItem ignores streaming thinking and tool events (merged in buildTimeline)', () => {
     expect(eventToTimelineItem(event({ id: 1, type: 'thinking.delta', payload: { text: '   ' } }))).toBeUndefined();
-    expect(eventToTimelineItem(event({ id: 2, type: 'run.error', payload: { error: 'Cursor failed.' } }))).toMatchObject({
+    expect(eventToTimelineItem(event({ id: 2, type: 'thinking.delta', payload: { text: 'x' } }))).toBeUndefined();
+    expect(
+      eventToTimelineItem(
+        event({
+          id: 3,
+          type: 'tool.started',
+          payload: { callId: 't', name: 'n', args: {} }
+        })
+      )
+    ).toBeUndefined();
+    expect(eventToTimelineItem(event({ id: 4, type: 'run.error', payload: { error: 'Cursor failed.' } }))).toMatchObject({
       kind: 'status',
       text: 'Cursor failed.',
       tone: 'error'

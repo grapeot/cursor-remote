@@ -50,6 +50,8 @@
 - `/api/health` 在已配置 `CURSOR_LOCAL_CWD` 时额外返回 **`localCwd`**（绝对路径）；不含 API key。
 - 侧栏 **CWD** 状态：第一行 `set` / `missing`，第二行展示路径并启用 **`overflow-wrap: anywhere`**、**`word-break: break-word`**；侧栏 **`min-width: 0`**、badge **`max-width: 100%`** 防止长路径溢出。
 - 集成测试与 `App.test.tsx` health mock 覆盖带 `localCwd` 的响应。
+- **Thinking 流式**：`buildTimeline` 按时间排序后对同一 `runId` 的 `thinking.delta` **追加拼接**（不再被 Map 覆盖只留最后一条）；支持 `thinking.completed` 将状态标为 completed。
+- **Tool 卡片**：`tool.started` 与 `tool.completed` **合并**同一 `callId`，完成后仍保留 **args（detail）**；UI 上 **completed/error** 也继续展示 `<pre class="tool-args">`，不再仅在 running 时显示。
 
 ## Lessons Learned
 

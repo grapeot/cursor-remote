@@ -56,48 +56,106 @@ export function buildTimeline(messages: MessageProjection[], runs: RunProjection
     });
   });
 
-  events.forEach((event) => {
-    const eventItem = eventToTimelineItem(event);
-    if (eventItem !== undefined) {
-      items.set(eventItem.id, eventItem);
+  const sortedEvents = [...events].sort((left, right) => {
+    const time = left.createdAt.localeCompare(right.createdAt);
+    if (time !== 0) {
+      return time;
     }
+    return left.id - right.id;
   });
+
+  for (const event of sortedEvents) {
+    mergeEventIntoTimeline(items, event);
+  }
 
   return [...items.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 }
 
-export function eventToTimelineItem(event: AppEvent): TimelineItem | undefined {
+function thinkingKey(event: AppEvent): string {
+  return `thinking-${event.runId ?? `n-${event.sessionId}`}`;
+}
+
+function mergeThinkingDelta(items: Map<string, TimelineItem>, event: AppEvent): void {
+  const text = readStringField(event.payload, 'text');
+  if (text === undefined || text.trim().length === 0) {
+    return;
+  }
+  const id = thinkingKey(event);
+  const existing = items.get(id);
+  if (existing !== undefined && existing.kind === 'thinking') {
+    items.set(id, {
+      ...existing,
+      text: existing.text + text,
+      status: 'streaming'
+    });
+    return;
+  }
+  items.set(id, {
+    kind: 'thinking',
+    id,
+    ...(event.runId !== undefined ? { runId: event.runId } : {}),
+    text,
+    status: 'streaming',
+    createdAt: event.createdAt
+  });
+}
+
+function mergeThinkingCompleted(items: Map<string, TimelineItem>, event: AppEvent): void {
+  const id = thinkingKey(event);
+  const existing = items.get(id);
+  if (existing !== undefined && existing.kind === 'thinking') {
+    items.set(id, { ...existing, status: 'completed' });
+  }
+}
+
+function mergeToolTimelineEvent(items: Map<string, TimelineItem>, event: AppEvent): void {
+  const tool = readToolPayload(event.payload);
+  if (tool === undefined) {
+    return;
+  }
+  const key = `tool-${tool.callId}`;
+  const prev = items.get(key);
+  const prevTool = prev?.kind === 'tool' ? prev : undefined;
+
+  const detail = tool.detail ?? prevTool?.detail;
+  const summary = tool.summary ?? prevTool?.summary;
+  const status =
+    event.type === 'tool.completed' ? 'completed' : event.type === 'tool.error' ? 'error' : 'running';
+
+  items.set(key, {
+    kind: 'tool',
+    id: key,
+    ...(event.runId !== undefined ? { runId: event.runId } : {}),
+    callId: tool.callId,
+    name: tool.name,
+    status,
+    ...(summary !== undefined ? { summary } : {}),
+    ...(detail !== undefined ? { detail } : {}),
+    createdAt: prevTool?.createdAt ?? event.createdAt
+  });
+}
+
+function mergeEventIntoTimeline(items: Map<string, TimelineItem>, event: AppEvent): void {
   if (event.type === 'thinking.delta') {
-    const text = readStringField(event.payload, 'text');
-    if (text === undefined || text.trim().length === 0) {
-      return undefined;
-    }
-    return {
-      kind: 'thinking',
-      id: `thinking-${event.runId ?? event.id}`,
-      ...(event.runId !== undefined ? { runId: event.runId } : {}),
-      text,
-      status: 'streaming',
-      createdAt: event.createdAt
-    };
+    mergeThinkingDelta(items, event);
+    return;
+  }
+  if (event.type === 'thinking.completed') {
+    mergeThinkingCompleted(items, event);
+    return;
   }
   if (event.type === 'tool.started' || event.type === 'tool.completed' || event.type === 'tool.error') {
-    const tool = readToolPayload(event.payload);
-    if (tool === undefined) {
-      return undefined;
-    }
-    return {
-      kind: 'tool',
-      id: `tool-${tool.callId}`,
-      ...(event.runId !== undefined ? { runId: event.runId } : {}),
-      callId: tool.callId,
-      name: tool.name,
-      status: event.type === 'tool.completed' ? 'completed' : event.type === 'tool.error' ? 'error' : 'running',
-      summary: tool.summary,
-      detail: tool.detail,
-      createdAt: event.createdAt
-    };
+    mergeToolTimelineEvent(items, event);
+    return;
   }
+
+  const eventItem = eventToTimelineItem(event);
+  if (eventItem !== undefined) {
+    items.set(eventItem.id, eventItem);
+  }
+}
+
+export function eventToTimelineItem(event: AppEvent): TimelineItem | undefined {
   if (event.type === 'task.updated') {
     const text = readStringField(event.payload, 'text') ?? readStringField(event.payload, 'status');
     return text

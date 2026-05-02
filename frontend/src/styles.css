@@ -354,6 +354,16 @@ h3 {
   text-transform: uppercase;
 }
 
+.tool-item .tool-args {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.tool-item .tool-result {
+  margin-top: 8px;
+}
+
 pre,
 code {
   border-radius: var(--radius-sm);
