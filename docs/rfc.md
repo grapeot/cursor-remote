@@ -360,6 +360,7 @@ Projection rules:
 
 - Initial state comes from `GET /api/sessions`, `GET /api/sessions/:id/messages`, and `GET /api/sessions/:id/runs`.
 - Submitting a prompt creates an optimistic `user` item and opens `/api/runs/:id/events`.
+- **`Session` list consistency (client):** the conversation sidebar renders each row from the list returned by `GET /api/sessions`, not only the selected session. Any live SSE handler or optimistic `POST …/runs` path that updates `SessionProjection.status`, `latestRunId`, or `updatedAt` must apply the same patch to **both** the matching entry in the sidebar list and the selected session state. Otherwise the timeline can show streaming or completed runs while the sidebar still shows `ready`, or a failed run while the sidebar still shows `running`. Client-side session status should mirror `ProjectionStore`: queued/running runs → session `running`; run `failed` → session `failed`; completed/cancelled → `idle`. `run.error` must mark the session `failed`; `run.result` should mark the run `completed` and session `idle` when the failure/cancel path was not taken (covers missing terminal `run.status` on flaky SSE).
 - `assistant.delta` appends to the current assistant item for that run, creating it if needed.
 - `thinking.delta` appends to the current thinking item for that run; it is visually subdued and labelled as activity/reasoning, not raw chain-of-thought.
 - `tool.started` creates or updates a running tool item and keeps it expanded.

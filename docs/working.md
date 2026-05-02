@@ -63,6 +63,7 @@
 - **Tool 卡片**：`tool.started` 与 `tool.completed` **合并**同一 `callId`，完成后仍保留 **args（detail）**；UI 上 **completed/error** 也继续展示 `<pre class="tool-args">`，不再仅在 running 时显示。
 - **Composer 快捷键**：**Enter** 换行；**⌘↵（Meta+Enter）或 Ctrl+Enter** 发送（与 Send 按钮同一套 `submitRun` 校验）；快捷键说明在 Prompt 标题旁，并用 **`aria-describedby`** 关联到 textarea。
 - **Coverage / `App.test.tsx`**：`vitest` 覆盖率 **`include`** 不再排除 `frontend/src/main.tsx`（入口组件仍主要由挂载集成测试覆盖）。`App.test.tsx` 覆盖：Send、Meta+Enter / Ctrl+Enter 发送、**纯 Enter 不调用 `startSessionRun` 且保留换行**、textarea **`aria-describedby`** 与快捷键文案。
+- **Conversations 侧栏 vs timeline 状态**：在 `frontend/src/main.tsx` 用 `syncSessionRow` 让 `sessions` 列表与选中 session 同事务更新；`sessionStatusFromRunStatus` 对齐 `ProjectionStore`；`submitRun` 乐观 `running`；`run.result` / `run.error` 修正客户端 run 与 session 终端态（缓和漏掉 SSE 或断线时的 stale `activeRun`）。本轮将上述诊断与测试矩阵写回 `docs/rfc.md`、`docs/test.md`。
 
 ## Lessons Learned
 
@@ -83,4 +84,4 @@
 - Native browser `EventSource` is enough for the Stage 1 client because the backend uses GET SSE and supports `Last-Event-ID`; no frontend streaming dependency is needed. The remaining product gap is SDK event fidelity, not transport plumbing.
 - Real Cursor `run.stream()` can emit terminal `status: FINISHED` before `run.wait()` emits final `run.result`. SSE/live tests should wait for both terminal status and result before closing the stream; otherwise the harness can falsely report a missing result event even when the app is correct.
 - A passing stream integration test is necessary but not sufficient. The product acceptance criterion is the client experience: selecting a conversation, chatting with Cursor, and seeing tool/thinking/status rendered in a usable timeline similar to OpenCode clients.
-- Frontend UI tests should assert product-level behavior rather than CSS details: the contract is conversation shell -> prompt submit -> timeline receives user, thinking, tool, assistant, and terminal result. Visual critique remains a separate design pass after this deterministic behavior is locked.
+- 前端对 **同一 session** 维护 `sessions[]`（侧栏）与 `session`（选中项）两套投影时，任一 SSE 或乐观更新若不同时 `upsert` 列表项，就会出现「点在 job 上显示 streaming / failed，侧栏仍 ready / running」的假不同步；列表必须与 `ProjectionStore` 使用同一套 `SessionStatus` 推导规则。
