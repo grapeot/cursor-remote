@@ -3,9 +3,10 @@ import type { Server } from 'node:http';
 import type { Express } from 'express';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/server/app.js';
-import type { CursorAgentGateway } from '../src/server/cursorAgent.js';
+import type { AsyncCursorGateway, CursorAgentGateway, RawCursorEvent } from '../src/server/cursorAgent.js';
 import type { AppConfig } from '../src/server/config.js';
-import type { RunSummary, SendPromptRequest } from '../src/shared/contracts.js';
+import type { RunSummary, SendPromptRequest, StartRunResponse } from '../src/shared/contracts.js';
+import type { MessageProjection, RunProjection, SessionProjection } from '../src/shared/projections.js';
 
 async function listen(app: Express): Promise<{ server: Server; baseUrl: string }> {
   return new Promise((resolve, reject) => {
@@ -56,6 +57,43 @@ class TestGateway implements CursorAgentGateway {
       resultText: 'Created by test gateway.'
     };
   }
+}
+
+class TestAsyncGateway extends TestGateway implements AsyncCursorGateway {
+  async executeRun(
+    _sessionId: string,
+    runId: string,
+    request: { prompt: string; modelId?: string; runtime?: 'mock' | 'local' },
+    onEvent: (event: RawCursorEvent) => void
+  ) {
+    setTimeout(() => {
+      onEvent({ type: 'assistant.delta', payload: { text: 'Async mock response.' } });
+      onEvent({ type: 'run.result', payload: { resultText: 'Async mock completed.' } });
+      onEvent({
+        type: 'run.status',
+        payload: {
+          runId,
+          prompt: request.prompt,
+          runtime: request.runtime ?? 'mock',
+          modelId: request.modelId ?? 'composer-2',
+          status: 'completed'
+        }
+      });
+    }, 0);
+    return { cursorRunId: `cursor-${runId}` };
+  }
+}
+
+async function waitFor<T>(read: () => Promise<T>, predicate: (value: T) => boolean): Promise<T> {
+  let lastValue = await read();
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (predicate(lastValue)) {
+      return lastValue;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    lastValue = await read();
+  }
+  return lastValue;
 }
 
 describe('createApp', () => {
@@ -118,6 +156,82 @@ describe('createApp', () => {
       const listedRun = listedBody.runs[0];
       expect(listedRun).toBeDefined();
       expect(listedRun?.id).toBe('test-run-1');
+    } finally {
+      await stop(server);
+    }
+  });
+
+  it('creates sessions and starts async session runs without waiting for completion', async () => {
+    const app = createApp(config, new TestAsyncGateway());
+    const { server, baseUrl } = await listen(app);
+    try {
+      const createdSession = await fetch(`${baseUrl}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Stage 1 session' })
+      });
+      expect(createdSession.status).toBe(201);
+      const sessionBody = (await createdSession.json()) as { session: SessionProjection };
+      expect(sessionBody.session.title).toBe('Stage 1 session');
+
+      const startedRun = await fetch(`${baseUrl}/api/sessions/${sessionBody.session.id}/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'Build the async flow' })
+      });
+      expect(startedRun.status).toBe(201);
+      const runBody = (await startedRun.json()) as StartRunResponse;
+      expect(runBody.run.status).toBe('queued');
+      expect(runBody.eventsUrl).toBe(`/api/runs/${runBody.run.id}/events`);
+
+      const completedRun = await waitFor(
+        async () => {
+          const response = await fetch(`${baseUrl}/api/runs/${runBody.run.id}`);
+          return (await response.json()) as { run: RunProjection };
+        },
+        (body) => body.run.status === 'completed'
+      );
+      expect(completedRun.run.resultText).toBe('Async mock completed.');
+
+      const messages = await fetch(`${baseUrl}/api/sessions/${sessionBody.session.id}/messages`);
+      const messagesBody = (await messages.json()) as { messages: MessageProjection[] };
+      expect(messagesBody.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+      expect(messagesBody.messages.at(-1)?.content).toBe('Async mock response.');
+    } finally {
+      await stop(server);
+    }
+  });
+
+  it('streams replayed run events with Last-Event-ID over SSE', async () => {
+    const app = createApp(config, new TestAsyncGateway());
+    const { server, baseUrl } = await listen(app);
+    try {
+      const sessionResponse = await fetch(`${baseUrl}/api/sessions`, { method: 'POST' });
+      const sessionBody = (await sessionResponse.json()) as { session: SessionProjection };
+      const runResponse = await fetch(`${baseUrl}/api/sessions/${sessionBody.session.id}/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'Stream events' })
+      });
+      const runBody = (await runResponse.json()) as StartRunResponse;
+
+      await waitFor(
+        async () => {
+          const response = await fetch(`${baseUrl}/api/runs/${runBody.run.id}`);
+          return (await response.json()) as { run: RunProjection };
+        },
+        (body) => body.run.status === 'completed'
+      );
+
+      const eventsResponse = await fetch(`${baseUrl}${runBody.eventsUrl}`, { headers: { 'Last-Event-ID': '1' } });
+      expect(eventsResponse.status).toBe(200);
+      const reader = eventsResponse.body?.getReader();
+      expect(reader).toBeDefined();
+      const firstChunk = await reader?.read();
+      reader?.cancel().catch(() => undefined);
+      const text = new TextDecoder().decode(firstChunk?.value);
+      expect(text).toContain('event: run.status');
+      expect(text).toContain(`"runId":"${runBody.run.id}"`);
     } finally {
       await stop(server);
     }

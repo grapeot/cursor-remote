@@ -34,6 +34,7 @@
 - Design review started after Milestone 1: captured the current UI with Playwright, asked GLM 5.1 for critique, and added `docs/design.md` as the visual direction for a premium Cursor remote-control console.
 - UI design pass applied to the current POC: compact console header, environment badges, mono prompt editor, Quick actions container, right-aligned primary action, and compact run timeline rows with shortened run ids.
 - Playwright verification passed for the design pass: final screenshot shows the design direction in-page and console warnings/errors are clear after adding a small SVG favicon.
+- Milestone 2 completed: added EventBroker, SSE response helpers, SessionService, RunService, async mock gateway execution, session/run REST routes, SSE replay endpoint, and integration tests for immediate queued responses and Last-Event-ID replay.
 
 ## Lessons Learned
 
@@ -50,3 +51,4 @@
 - Live Cursor 测试必须使用临时 sandbox cwd，不能指向真实 workspace。成功判据应落在客观状态上：event sequence、文件内容、diff changed files、follow-up context 和 replay consistency，而不是自然语言主观判断。
 - `ProjectionStore` 应保持 deterministic materialized view 角色：同一 event log 通过 `rebuild()` 或逐条 `apply()` 得到相同状态；Cursor-derived payload 继续作为 `unknown`/record 处理，只有 app lifecycle payload 做 type guard。
 - 当前 UI 的主要设计债不是信息架构，而是视觉密度和默认控件气味。下一轮 RFC/UI work 应围绕 compact console header、environment badges、mono prompt editor、compact runs timeline 和 activity panel 展开。
+- Milestone 2 keeps the deprecated blocking `/api/runs` route alive for the current frontend while the new `/api/sessions/:sessionId/runs` path uses EventStore/ProjectionStore and returns queued immediately. This lets Stage 1 migrate UI and Cursor SDK streaming without a big-bang route switch.

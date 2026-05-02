@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { MessageProjection, RunProjection, SessionProjection } from './projections.js';
 
 export const runtimeSchema = z.enum(['mock', 'cloud', 'local']);
 export type CursorRuntime = z.infer<typeof runtimeSchema>;
@@ -48,4 +49,43 @@ export interface ErrorResponse {
     code: string;
     message: string;
   };
+}
+
+export const createSessionRequestSchema = z.object({
+  title: z.string().min(1).max(200).optional()
+});
+
+export type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>;
+
+export const startRunRequestSchema = z.object({
+  prompt: z.string().min(1, 'Prompt is required').max(10000),
+  modelId: z.string().min(1).optional(),
+  runtime: z.enum(['mock', 'local']).optional()
+});
+
+export type StartRunRequest = z.infer<typeof startRunRequestSchema>;
+
+export interface CreateSessionResponse {
+  session: SessionProjection;
+}
+
+export interface ListSessionsResponse {
+  sessions: SessionProjection[];
+}
+
+export interface StartRunResponse {
+  run: RunProjection;
+  eventsUrl: string;
+}
+
+export interface GetRunResponse {
+  run: RunProjection | RunSummary;
+}
+
+export interface ListSessionRunsResponse {
+  runs: RunProjection[];
+}
+
+export interface ListMessagesResponse {
+  messages: MessageProjection[];
 }

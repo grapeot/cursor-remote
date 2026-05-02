@@ -1,9 +1,31 @@
 import { randomUUID } from 'node:crypto';
 import type { AppConfig } from './config.js';
-import type { RunSummary, SendPromptRequest } from '../shared/contracts.js';
+import type { RunSummary, SendPromptRequest, StartRunRequest } from '../shared/contracts.js';
+import type { AppEventType } from '../shared/events.js';
 
 export interface CursorAgentGateway {
   startRun(request: SendPromptRequest): Promise<RunSummary>;
+}
+
+export interface RawCursorEvent {
+  type: AppEventType;
+  payload: unknown;
+  cursorEventType?: string;
+  cursorEventId?: string;
+}
+
+export interface AsyncRunHandle {
+  cursorRunId: string;
+  cancel?(): Promise<void>;
+}
+
+export interface AsyncCursorGateway {
+  executeRun(
+    sessionId: string,
+    runId: string,
+    request: StartRunRequest,
+    onEvent: (event: RawCursorEvent) => void
+  ): Promise<AsyncRunHandle>;
 }
 
 function nowIso(): string {
@@ -35,7 +57,7 @@ function withOptionalRunFields(
   };
 }
 
-export class MockCursorAgentGateway implements CursorAgentGateway {
+export class MockCursorAgentGateway implements CursorAgentGateway, AsyncCursorGateway {
   async startRun(request: SendPromptRequest): Promise<RunSummary> {
     const timestamp = nowIso();
     return withOptionalRunFields(
@@ -56,9 +78,37 @@ export class MockCursorAgentGateway implements CursorAgentGateway {
       }
     );
   }
+
+  async executeRun(
+    _sessionId: string,
+    runId: string,
+    request: StartRunRequest,
+    onEvent: (event: RawCursorEvent) => void
+  ): Promise<AsyncRunHandle> {
+    const modelId = normalizeOptional(request.modelId) ?? 'composer-2';
+    const runtime = request.runtime ?? 'mock';
+    setTimeout(() => {
+      onEvent({ type: 'assistant.delta', payload: { text: 'Mock Cursor is processing the prompt. ' } });
+      onEvent({ type: 'tool.started', payload: { name: 'write_file', callId: `tool-${runId}`, status: 'running' } });
+      onEvent({ type: 'tool.completed', payload: { name: 'write_file', callId: `tool-${runId}`, status: 'completed' } });
+      onEvent({ type: 'assistant.delta', payload: { text: 'Synthetic run completed.' } });
+      onEvent({ type: 'run.result', payload: { resultText: `Mock run completed with ${modelId} in ${runtime} mode.` } });
+      onEvent({
+        type: 'run.status',
+        payload: {
+          runId,
+          prompt: request.prompt,
+          runtime,
+          modelId,
+          status: 'completed'
+        }
+      });
+    }, 0);
+    return { cursorRunId: `mock-${runId}` };
+  }
 }
 
-export class CursorSdkGateway implements CursorAgentGateway {
+export class CursorSdkGateway implements CursorAgentGateway, AsyncCursorGateway {
   constructor(private readonly config: AppConfig) {}
 
   async startRun(request: SendPromptRequest): Promise<RunSummary> {
@@ -132,11 +182,95 @@ export class CursorSdkGateway implements CursorAgentGateway {
       await agent[Symbol.asyncDispose]();
     }
   }
+
+  async executeRun(
+    _sessionId: string,
+    runId: string,
+    request: StartRunRequest,
+    onEvent: (event: RawCursorEvent) => void
+  ): Promise<AsyncRunHandle> {
+    if (!this.config.cursorApiKey) {
+      throw new Error('CURSOR_API_KEY is required for real Cursor SDK runs.');
+    }
+    const runtime = request.runtime ?? (this.config.runtime === 'local' ? 'local' : 'mock');
+    if (runtime === 'mock') {
+      return new MockCursorAgentGateway().executeRun(_sessionId, runId, request, onEvent);
+    }
+    if (!this.config.localCwd) {
+      throw new Error('CURSOR_LOCAL_CWD is required for local Cursor SDK runs.');
+    }
+
+    const modelId = normalizeOptional(request.modelId) ?? this.config.defaultModel;
+    const { Agent } = await import('@cursor/sdk');
+    const agent = await Agent.create({
+      apiKey: this.config.cursorApiKey,
+      model: { id: modelId },
+      local: { cwd: this.config.localCwd }
+    });
+
+    void (async () => {
+      try {
+        const run = await agent.send(request.prompt);
+        for await (const message of run.stream()) {
+        const cursorEventType = readCursorEventType(message);
+        onEvent({
+          type: mapCursorEventType(message),
+          payload: message,
+          ...(cursorEventType ? { cursorEventType } : {})
+        });
+        }
+        const result = await run.wait();
+        onEvent({
+          type: 'run.result',
+          payload: typeof result.result === 'string' ? { resultText: result.result } : {}
+        });
+        onEvent({
+          type: 'run.status',
+          payload: {
+            runId,
+            prompt: request.prompt,
+            runtime,
+            modelId,
+            status: result.status === 'finished' ? 'completed' : 'failed'
+          }
+        });
+      } finally {
+        await agent[Symbol.asyncDispose]();
+      }
+    })();
+
+    return { cursorRunId: runId };
+  }
 }
 
-export function createCursorGateway(config: AppConfig): CursorAgentGateway {
+export function createCursorGateway(config: AppConfig): CursorAgentGateway & AsyncCursorGateway {
   if (config.runtime === 'mock') {
     return new MockCursorAgentGateway();
   }
   return new CursorSdkGateway(config);
+}
+
+function readCursorEventType(message: unknown): string | undefined {
+  if (typeof message === 'object' && message !== null && 'type' in message) {
+    const value = message.type;
+    return typeof value === 'string' ? value : undefined;
+  }
+  return undefined;
+}
+
+function mapCursorEventType(message: unknown): AppEventType {
+  const type = readCursorEventType(message);
+  if (type === 'assistant') {
+    return 'assistant.delta';
+  }
+  if (type === 'thinking') {
+    return 'thinking.delta';
+  }
+  if (type === 'tool_call') {
+    return 'tool.delta';
+  }
+  if (type === 'task') {
+    return 'task.updated';
+  }
+  return 'assistant.delta';
 }
