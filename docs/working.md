@@ -23,6 +23,10 @@
 - 设计决策：引入 `Session -> Run -> Event` 作为产品模型。`Session` 是长期用户对话，`Run` 是一次 Cursor prompt 执行，`Event` 是用于 live SSE 和 replay 的 append-only stream。
 - 设计决策：Stage 1 应用 async run lifecycle + SSE 替换阻塞式 `POST /api/runs -> run.wait()`。Cursor `run.stream()` / `onDelta` events 应映射成 `assistant.delta`、`thinking.delta`、`tool.started`、`tool.completed`、`run.result` 等 app events。
 - 设计决策：不实现 OpenCode protocol compatibility。复用 OpenCode 的体验形态——session history、live activity、tool cards、diff/result review——但 server protocol 保持 Cursor-native。
+- 设计决策：不论 Stage 几都不做 connector 平台。产品长期 Cursor-only，网络暴露边界交给 Tailscale，应用层不做 bearer token / OAuth / shared secret auth。
+- 设计决策：当前阻塞式 POC 标记为 deprecated reference。后续实现围绕 `EventStore`、`ProjectionStore`、`EventBroker`、`RunService`、`DiffService` 和 `CursorStreamMapper` 重建，不继续在单一 `POST /api/runs` launcher 上堆功能。
+- 设计决策：测试覆盖是一等需求。默认 deterministic suite 证明 app logic 正确；`RUN_CURSOR_LIVE_TESTS=1` 的 live Cursor suite 用真实 token、`composer-2` 和一次性 sandbox 判断 Cursor API 当前是否可用。
+- Evaluation plan 已细化到 `docs/test.md`：覆盖 unit、API integration、SSE replay、frontend projection、local diff、mock gateway event sequence、live Cursor sandbox、coverage gate 和 failure diagnosis matrix。
 
 ## Lessons Learned
 
@@ -35,3 +39,5 @@
 - OpenCode 最值得借鉴的是架构，而不是协议：REST 承载 durable state，SSE 承载 live events，client 把 agent 工作渲染成 text、activity、tools、results 组成的 timeline。
 - Cursor SDK 已经暴露了 Stage 1 UI 所需的 stream surface：`assistant`、`thinking`、`tool_call`、`status`、`task`，以及更底层的 delta callbacks。Tool event envelope 足够用于展示，但 `args` 和 `result` payloads 应按 best-effort details 处理。
 - `Agent.resume()` 恢复的是 agent，不一定是被中断的 run。带单调 event id 的 app-level event replay 应独立于 SDK-level resume 实现。
+- 默认测试和 live 测试要分层。默认测试不能依赖网络或 token；live 测试的价值是暴露 token/account、model availability、SDK schema、stream timeout、SSE broker、diff baseline 等 failure layer。
+- Live Cursor 测试必须使用临时 sandbox cwd，不能指向真实 workspace。成功判据应落在客观状态上：event sequence、文件内容、diff changed files、follow-up context 和 replay consistency，而不是自然语言主观判断。
