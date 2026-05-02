@@ -16,7 +16,7 @@ Read these **before changing behavior or shipping UI**:
 | [`docs/test.md`](docs/test.md) | Testing strategy (mock-heavy, optional live Cursor). |
 | [`docs/working.md`](docs/working.md) | Working log / checkpoints. |
 
-Optional context: [`docs/design_critique.md`](docs/design_critique.md).
+| [`docs/integration_wip.md`](docs/integration_wip.md) | 浏览器端到端手跑日志与验收清单（先于 Playwright）。 |
 
 ## Design goals (short version)
 

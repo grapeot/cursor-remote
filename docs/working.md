@@ -62,7 +62,9 @@
 - Composer **默认空白**，长文案仅作 **`placeholder`**，避免误发；去掉 mock「Fill hello / smoke」快捷填充。
 - 删除仓库内 `mvp_sandbox/`、`scripts/run_mvp_once.ts` 与 **`npm run mvp:run`**；日常全靠用户自拟 prompt；需要真实 SDK 走 `RUN_CURSOR_LIVE_TESTS` 临时 cwd。
 - 根目录 bilingual README（英文为主 + 中文锚链）、指向 PRD/RFC 等文档；GitHub Actions CI：`typecheck` / `test` / `build`。
-- （环境）在本机装好 Playwright 用 Chromium：`npx playwright install chromium`（首镜可能超时会自动换 CDN，属正常）。
+- 集成测试方法论对齐 Meta-Skill / T2：先用 **浏览器 MCP（或人肉）** 在 `5177` 跑通真实 local SDK 闭环并写 **`docs/integration_wip.md`** 的验收表，再给 Playwright；避免未定型 UI 先入 CI。
+- 手跑一例：会话 → composer → Send → Thinking / shell / edit 等于时间线，`integration_tmp/hello_integration.py` 落盘可验（目录 **`integration_tmp/`** `.gitignore`）。
+- **`tests/fixtures/two_sum`** + **`tests/two_sum_harness.node.test.ts`**：stdlib unittest 作为与 UI 解耦的小型结果确定性示例；暂未引入 Playwright dependency。
 
 ## 经验教训
 

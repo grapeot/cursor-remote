@@ -90,10 +90,50 @@ export class MockCursorAgentGateway implements CursorAgentGateway, AsyncCursorGa
     const modelId = normalizeOptional(request.modelId) ?? 'composer-2';
     const runtime = request.runtime ?? 'mock';
     setTimeout(() => {
-      onEvent({ type: 'assistant.delta', payload: { text: 'Mock Cursor is processing the prompt. ' } });
-      onEvent({ type: 'tool.started', payload: { name: 'write_file', callId: `tool-${runId}`, status: 'running' } });
-      onEvent({ type: 'tool.completed', payload: { name: 'write_file', callId: `tool-${runId}`, status: 'completed' } });
-      onEvent({ type: 'assistant.delta', payload: { text: 'Synthetic run completed.' } });
+      const thinkingCallId = `thinking-${runId}`;
+      const fileCallId = `file-${runId}`;
+      // Mirror a realistic streamed sequence for UI/integration tests: reasoning tool, synthetic file touch, deltas, terminal result.
+      onEvent({
+        type: 'assistant.delta',
+        payload: {
+          text: 'Mock Cursor: interpreting this like a deterministic interview task (e.g. LeetCode two-sum in Python). '
+        }
+      });
+      onEvent({
+        type: 'tool.started',
+        payload: { name: 'thinking', callId: thinkingCallId, status: 'running' }
+      });
+      onEvent({
+        type: 'tool.completed',
+        payload: {
+          name: 'thinking',
+          callId: thinkingCallId,
+          status: 'completed',
+          result: 'Use a hash map for O(n) indices; brute force would be rejected for larger n.'
+        }
+      });
+      onEvent({
+        type: 'tool.started',
+        payload: {
+          name: 'write_file',
+          callId: fileCallId,
+          args: { path: 'solutions/two_sum.py' },
+          status: 'running'
+        }
+      });
+      onEvent({
+        type: 'tool.completed',
+        payload: {
+          name: 'write_file',
+          callId: fileCallId,
+          status: 'completed',
+          result: 'Wrote solutions/two_sum.py (mock in-memory Cursor run).'
+        }
+      });
+      onEvent({
+        type: 'assistant.delta',
+        payload: { text: '\nSynthetic summary: ready for a real local SDK run outside mock mode.' }
+      });
       onEvent({ type: 'run.result', payload: { resultText: `Mock run completed with ${modelId} in ${runtime} mode.` } });
       onEvent({
         type: 'run.status',

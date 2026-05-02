@@ -3,6 +3,9 @@ dist/
 coverage/
 data/
 tmp/
+integration_tmp/
+playwright-report/
+test-results/
 .env
 .env.*
 !.env.example
