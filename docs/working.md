@@ -41,6 +41,7 @@
 - Product reset after reviewing the post-SSE UI: the current browser is still a launcher/event monitor, not the desired coding client. Next frontend milestone should rebuild around OpenCode-like conversations: left session list, right chat timeline, session-scoped composer, rendered assistant/thinking/tool/status blocks, and no raw SSE event table in the default UI.
 - Process correction: design critique should run after the functional chat client exists. The intermediate GLM critique based on the event-monitor UI was discarded and should not guide the next implementation milestone.
 - OpenCode reference pass completed. iOS client points to session sidebar + transcript + inline tool cards + streaming reasoning (`SessionListView`, `ChatTabView`, `MessageRowView`, `ToolPartView`, `StreamingReasoningView`). Official OpenCode points to message parts as the rendering unit (`message-v2.ts`, `Share.tsx`, `share/part.tsx`) and the bootstrap snapshot + incremental event pattern. Cursor UI will implement a smaller app-level `TimelineItem` projection from Cursor events.
+- Frontend chat-client rewrite applied: replaced the single-column launcher/event monitor with a persistent conversation sidebar, selected-session chat header, timeline projection, and sticky composer. The raw SSE event panel is removed from default UI; `assistant.delta`, `thinking.delta`, tool events, task updates, run errors and run statuses now render as chat timeline items.
 
 ## Lessons Learned
 
