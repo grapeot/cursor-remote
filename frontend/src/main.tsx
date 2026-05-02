@@ -40,11 +40,8 @@ declare global {
   }
 }
 
-const MVP_PYTHON_HELLO_PROMPT = `In this repo, create or overwrite the file mvp_sandbox/hello_world.py with exactly:
-
-print("Hello, world!")
-
-Use nothing else in that file (no shebang, no imports). If mvp_sandbox/ does not exist, create it.`;
+const COMPOSER_PLACEHOLDER =
+  'e.g. Create a minimal Python hello-world script in this repo and run it';
 
 const SESSION_STORAGE_KEY = 'cursor-remote.sessionId';
 
@@ -65,7 +62,7 @@ export function App() {
   const [runs, setRuns] = useState<RunProjection[]>([]);
   const [messages, setMessages] = useState<MessageProjection[]>([]);
   const [events, setEvents] = useState<AppEvent[]>([]);
-  const [prompt, setPrompt] = useState(MVP_PYTHON_HELLO_PROMPT);
+  const [prompt, setPrompt] = useState('');
   const [modelId, setModelId] = useState('composer-2');
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -394,8 +391,6 @@ export function App() {
     shouldStickToBottomRef.current = distanceFromBottom < 150;
   }
 
-  const showSmokeActions = health?.runtime === 'mock';
-
   return (
     <main className="app-shell">
       <aside className="conversation-sidebar">
@@ -496,11 +491,6 @@ export function App() {
             <div className="chat-empty">
               <h3>Start a Cursor conversation</h3>
               <p>Send a task below. Cursor will work in the configured local cwd and stream assistant text, tool activity (including batched Thinking), and status here.</p>
-              {showSmokeActions ? (
-                <button type="button" className="outline" disabled={activeRun !== undefined} onClick={() => setPrompt(MVP_PYTHON_HELLO_PROMPT)}>
-                  Fill Python hello world prompt
-                </button>
-              ) : null}
             </div>
           ) : (
             timelineItems.map((item) => <TimelineItemView key={`${item.kind}-${item.id}`} item={item} />)
@@ -528,16 +518,11 @@ export function App() {
               onChange={(event) => setPrompt(event.target.value)}
               onKeyDown={handleComposerKeyDown}
               rows={4}
-              placeholder="Ask Cursor to edit, explain, or create code in the configured cwd…"
+              placeholder={COMPOSER_PLACEHOLDER}
               aria-describedby="composer-shortcut-hint"
             />
           </div>
           <div className="composer-actions">
-            {showSmokeActions ? (
-              <button type="button" className="ghost" disabled={activeRun !== undefined} onClick={() => setPrompt(MVP_PYTHON_HELLO_PROMPT)}>
-                Use smoke prompt
-              </button>
-            ) : null}
             <button type="submit" disabled={isSending || activeRun !== undefined || session === null || prompt.trim().length === 0}>
               {activeRun ? 'Cursor is running…' : isSending ? 'Sending…' : 'Send'}
             </button>

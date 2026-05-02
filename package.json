@@ -8,7 +8,6 @@
   ],
   "scripts": {
     "dev": "concurrently -n server,frontend -c blue,green \"npm run dev:server\" \"npm run dev:frontend\"",
-    "mvp:run": "tsx scripts/run_mvp_once.ts",
     "dev:server": "tsx watch src/server/index.ts",
     "dev:frontend": "npm --prefix frontend run dev",
     "build": "npm run build:server && npm run build:frontend",

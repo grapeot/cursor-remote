@@ -81,6 +81,12 @@
 - **品牌形象**：`frontend/index.html` 的 `<title>` 与 README 主标题改为 **Cursor Remote**（不再称 Cloud Remote POC）；`src/server/index.ts` 启动日志同步。
 - **`favicon.svg`**：用 **Codex CLI**（模型输出；因默认 read-only sandbox 未直接落盘）审阅后写入 `frontend/public/favicon.svg`。Express 额外注册 **`GET /favicon.svg`**（`image/svg+xml`）与 **`GET /favicon.ico` → 302** 到 svg，单独打 API 端口时也能显示标签图标。
 
+### 2026-05-04 — composer placeholder & remove `mvp_sandbox`
+
+- Frontend **composer** starts with an empty `prompt`; the previous long default text is **`placeholder`** only (`e.g. Create a minimal Python hello-world script in this repo and run it`), so ⌘↵ / Send does not fire a pre-filled task.
+- Removed mock-only quick actions (**Fill Python hello world** / **Use smoke prompt**).
+- Deleted repo **`mvp_sandbox/`** (`.gitkeep`, `hello_world.py`) and **`scripts/run_mvp_once.ts`** plus **`npm run mvp:run`**. Live SDK verification remains **`RUN_CURSOR_LIVE_TESTS=1`** with a temp cwd in `tests/live.cursor.test.ts`; day-to-day use is entirely user-authored prompts.
+
 ## Lessons Learned
 
 - Cursor API keys must stay server-side; a browser or mobile client should call a project-owned backend instead of Cursor directly.
