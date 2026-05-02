@@ -8,5 +8,6 @@ tmp/
 !.env.example
 .DS_Store
 npm-debug.log*
+*.tsbuildinfo
 vite.config.ts.timestamp-*
 vite.config.js.timestamp-*
