@@ -39,6 +39,8 @@ export function App() {
   const [isSending, setIsSending] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const eventSourcesRef = useRef<Map<string, EventSource>>(new Map());
+  const timelineRef = useRef<HTMLDivElement | null>(null);
+  const shouldStickToBottomRef = useRef(true);
 
   const activeRun = runs.find((run) => run.status === 'queued' || run.status === 'running');
   const timelineItems = useMemo(() => buildTimeline(messages, runs, events), [messages, runs, events]);
@@ -95,6 +97,14 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const timeline = timelineRef.current;
+    if (timeline === null || !shouldStickToBottomRef.current) {
+      return;
+    }
+    timeline.scrollTop = timeline.scrollHeight;
+  }, [timelineItems.length]);
+
   async function selectSession(nextSession: SessionProjection): Promise<void> {
     setError(null);
     setEvents([]);
@@ -126,10 +136,11 @@ export function App() {
       });
       setRuns((currentRuns) => upsertRun(currentRuns, response.run));
       setMessages((currentMessages) => [
-        createOptimisticUserMessage(session.id, response.run.id, effectivePrompt),
-        ...currentMessages
+        ...currentMessages,
+        createOptimisticUserMessage(session.id, response.run.id, effectivePrompt, response.run.createdAt)
       ]);
       setEvents([]);
+      shouldStickToBottomRef.current = true;
       openRunEvents(response.run.id, response.eventsUrl);
       setPrompt('');
     } catch (submitError) {
@@ -219,6 +230,17 @@ export function App() {
     }
   }
 
+  function handleTimelineScroll(): void {
+    const timeline = timelineRef.current;
+    if (timeline === null) {
+      return;
+    }
+    const distanceFromBottom = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight;
+    shouldStickToBottomRef.current = distanceFromBottom < 150;
+  }
+
+  const showSmokeActions = health?.runtime === 'mock';
+
   return (
     <main className="app-shell">
       <aside className="conversation-sidebar">
@@ -282,14 +304,16 @@ export function App() {
         ) : null}
         {error ? <p className="error error-banner">{error}</p> : null}
 
-        <div className="timeline" aria-label="Conversation timeline">
+        <div className="timeline" aria-label="Conversation timeline" ref={timelineRef} onScroll={handleTimelineScroll}>
           {timelineItems.length === 0 ? (
             <div className="chat-empty">
               <h3>Start a Cursor conversation</h3>
               <p>Send a task below. Cursor will work in the configured local cwd and stream assistant text, thinking, tools, and status here.</p>
-              <button type="button" className="outline" disabled={activeRun !== undefined} onClick={() => setPrompt(MVP_PYTHON_HELLO_PROMPT)}>
-                Fill Python hello world prompt
-              </button>
+              {showSmokeActions ? (
+                <button type="button" className="outline" disabled={activeRun !== undefined} onClick={() => setPrompt(MVP_PYTHON_HELLO_PROMPT)}>
+                  Fill Python hello world prompt
+                </button>
+              ) : null}
             </div>
           ) : (
             timelineItems.map((item) => <TimelineItemView key={item.id} item={item} />)
@@ -297,10 +321,13 @@ export function App() {
         </div>
 
         <form className="composer" onSubmit={(event) => void handleSubmit(event)}>
-          <label className="composer-model">
-            <span>Model</span>
-            <input value={modelId} onChange={(event) => setModelId(event.target.value)} />
-          </label>
+          <details className="composer-model">
+            <summary>Model: {modelId || 'default'}</summary>
+            <label>
+              <span>Model ID</span>
+              <input value={modelId} onChange={(event) => setModelId(event.target.value)} />
+            </label>
+          </details>
           <label className="composer-prompt">
             <span>Prompt</span>
             <textarea
@@ -311,9 +338,11 @@ export function App() {
             />
           </label>
           <div className="composer-actions">
-            <button type="button" className="ghost" disabled={activeRun !== undefined} onClick={() => setPrompt(MVP_PYTHON_HELLO_PROMPT)}>
-              Use smoke prompt
-            </button>
+            {showSmokeActions ? (
+              <button type="button" className="ghost" disabled={activeRun !== undefined} onClick={() => setPrompt(MVP_PYTHON_HELLO_PROMPT)}>
+                Use smoke prompt
+              </button>
+            ) : null}
             <button type="submit" disabled={isSending || activeRun !== undefined || session === null || prompt.trim().length === 0}>
               {activeRun ? 'Cursor is running…' : isSending ? 'Sending…' : 'Send'}
             </button>
@@ -328,7 +357,7 @@ function TimelineItemView({ item }: { item: TimelineItem }) {
   if (item.kind === 'user') {
     return (
       <article className="timeline-item user-item">
-        <div className="timeline-label">You · {item.status}</div>
+        <div className="timeline-label">You · {item.status} · {formatTimelineTime(item.createdAt)}</div>
         <p>{item.text}</p>
       </article>
     );
@@ -336,7 +365,10 @@ function TimelineItemView({ item }: { item: TimelineItem }) {
   if (item.kind === 'assistant') {
     return (
       <article className={`timeline-item assistant-item assistant-${item.status}`}>
-        <div className="timeline-label">Cursor · {item.status}</div>
+        <div className="timeline-label">
+          {item.status === 'streaming' ? <span className="streaming-dot" aria-hidden="true" /> : null}
+          Cursor · {item.status} · {formatTimelineTime(item.createdAt)}
+        </div>
         <p>{item.text}</p>
       </article>
     );
@@ -344,7 +376,10 @@ function TimelineItemView({ item }: { item: TimelineItem }) {
   if (item.kind === 'thinking') {
     return (
       <article className="timeline-item thinking-item">
-        <div className="timeline-label">Thinking · {item.status}</div>
+        <div className="timeline-label">
+          {item.status === 'streaming' ? <span className="streaming-dot" aria-hidden="true" /> : null}
+          Thinking · {item.status} · {formatTimelineTime(item.createdAt)}
+        </div>
         <p>{item.text}</p>
       </article>
     );
@@ -355,7 +390,7 @@ function TimelineItemView({ item }: { item: TimelineItem }) {
         <div className="tool-header">
           <span>{item.status === 'running' ? '●' : item.status === 'error' ? '!' : '✓'}</span>
           <strong>{item.name}</strong>
-          <code>{item.callId}</code>
+          <span className="tool-status">{item.status}</span>
         </div>
         {item.summary ? <p>{item.summary}</p> : null}
         {item.status === 'running' && item.detail !== undefined ? <pre>{formatDetail(item.detail)}</pre> : null}
@@ -364,9 +399,17 @@ function TimelineItemView({ item }: { item: TimelineItem }) {
   }
   return (
     <article className={`timeline-item status-item status-${item.tone}`}>
-      <span>{item.text}</span>
+      <span>{item.text} · {formatTimelineTime(item.createdAt)}</span>
     </article>
   );
+}
+
+function formatTimelineTime(value: string): string {
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) {
+    return value;
+  }
+  return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 interface StatusBadgeProps {
@@ -455,8 +498,7 @@ function upsertSession(currentSessions: SessionProjection[], nextSession: Sessio
   return currentSessions.map((candidate) => (candidate.id === nextSession.id ? nextSession : candidate));
 }
 
-function createOptimisticUserMessage(sessionId: string, runId: string, content: string): MessageProjection {
-  const createdAt = new Date().toISOString();
+function createOptimisticUserMessage(sessionId: string, runId: string, content: string, createdAt: string): MessageProjection {
   return {
     id: `optimistic-user-${runId}`,
     sessionId,
@@ -483,7 +525,7 @@ function appendAssistantDelta(currentMessages: MessageProjection[], event: AppEv
       createdAt: event.createdAt,
       updatedAt: event.createdAt
     };
-    return [message, ...currentMessages];
+    return [...currentMessages, message];
   }
   return currentMessages.map((message) =>
     message.id === existingMessage.id ? { ...message, content: `${message.content}${text}`, updatedAt: event.createdAt } : message

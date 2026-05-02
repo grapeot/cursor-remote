@@ -60,7 +60,7 @@ describe('App chat client', () => {
       runtime: 'local'
     }));
     expect(MockEventSource.latest().url).toBe('/api/runs/run-1/events');
-    expect(screen.getByText('You · sent')).toBeTruthy();
+    expect(screen.getByText(/You · sent ·/)).toBeTruthy();
     expect(screen.getByText('Create hello.txt')).toBeTruthy();
 
     act(() => {
@@ -72,11 +72,11 @@ describe('App chat client', () => {
       MockEventSource.latest().emit(event({ id: 7, type: 'run.result', payload: { resultText: 'Created hello.txt.' }, createdAt: '2026-05-01T12:00:06.000Z' }));
     });
 
-    expect(await screen.findByText('Thinking · streaming')).toBeTruthy();
+    expect(await screen.findByText(/Thinking · streaming ·/)).toBeTruthy();
     expect(screen.getByText('Inspecting workspace.')).toBeTruthy();
     expect(screen.getByText('write_file')).toBeTruthy();
     expect(screen.getByText('Wrote hello.txt')).toBeTruthy();
-    expect(screen.getByText('Cursor · completed')).toBeTruthy();
+    expect(screen.getByText(/Cursor · completed ·/)).toBeTruthy();
     expect(screen.getByText('Created hello.txt.')).toBeTruthy();
     expect(MockEventSource.latest().closed).toBe(true);
   });

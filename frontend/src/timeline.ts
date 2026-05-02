@@ -23,7 +23,7 @@ export type TimelineItem =
 
 export function buildTimeline(messages: MessageProjection[], runs: RunProjection[], events: AppEvent[]): TimelineItem[] {
   const items = new Map<string, TimelineItem>();
-  [...messages].reverse().forEach((message) => {
+  messages.forEach((message) => {
     if (message.role === 'user') {
       items.set(message.id, {
         kind: 'user',
