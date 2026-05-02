@@ -48,6 +48,9 @@
 ### 2026-05-02
 
 - `/api/health` 在已配置 `CURSOR_LOCAL_CWD` 时额外返回 **`localCwd`**（绝对路径）；不含 API key。
+- Assistant 气泡：使用 **`react-markdown`** + **`remark-gfm`** 将模型返回的 Markdown 渲染为安全 HTML（不启用原始 HTML passthrough）；内容仅空白时使用 `markdown-body--empty` 占位。
+- `.assistant-item .markdown-body` 补充列表、表格、blockquote、分割线等样式，与现有聊天密度一致。
+- 测试：`MarkdownContent.test.tsx` 做单测（强调、标题、GFM 表、空白输入）；`App.test.tsx` 增加 SSE `assistant.delta` 含 ATX 标题与加粗语法时的集成断言（真实 heading + strong DOM）。
 - 侧栏 **CWD** 状态：第一行 `set` / `missing`，第二行展示路径并启用 **`overflow-wrap: anywhere`**、**`word-break: break-word`**；侧栏 **`min-width: 0`**、badge **`max-width: 100%`** 防止长路径溢出。
 - 集成测试与 `App.test.tsx` health mock 覆盖带 `localCwd` 的响应。
 - **Thinking 流式**：`buildTimeline` 按时间排序后对同一 `runId` 的 `thinking.delta` **追加拼接**（不再被 Map 覆盖只留最后一条）；支持 `thinking.completed` 将状态标为 completed。

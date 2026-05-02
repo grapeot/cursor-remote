@@ -14,6 +14,7 @@ import {
   listSessions,
   startSessionRun
 } from './api';
+import { MarkdownContent } from './MarkdownContent';
 import { buildTimeline, formatDetail, shortRunId } from './timeline';
 import type { TimelineItem } from './timeline';
 import './styles.css';
@@ -393,7 +394,7 @@ function TimelineItemView({ item }: { item: TimelineItem }) {
           {item.status === 'streaming' ? <span className="streaming-dot" aria-hidden="true" /> : null}
           Cursor · {item.status} · {formatTimelineTime(item.createdAt)}
         </div>
-        <p>{item.text}</p>
+        <MarkdownContent markdown={item.text} />
       </article>
     );
   }

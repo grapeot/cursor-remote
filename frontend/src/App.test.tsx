@@ -88,6 +88,40 @@ describe('App chat client', () => {
     expect(MockEventSource.latest().closed).toBe(true);
   });
 
+  it('renders assistant markdown as structured HTML (heading + bold)', async () => {
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Conversations' })).toBeTruthy();
+    const textarea = screen.getByLabelText('Prompt');
+    await userEvent.clear(textarea);
+    await userEvent.type(textarea, 'Md');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(api.startSessionRun).toHaveBeenCalled());
+
+    act(() => {
+      MockEventSource.latest().emit(
+        event({
+          id: 2,
+          type: 'assistant.delta',
+          payload: { text: '# Title\n\nParagraph with **emphasis**.' },
+          createdAt: '2026-05-01T12:00:05.000Z'
+        })
+      );
+      MockEventSource.latest().emit(
+        event({
+          id: 3,
+          type: 'run.result',
+          payload: { resultText: 'ok' },
+          createdAt: '2026-05-01T12:00:06.000Z'
+        })
+      );
+    });
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Title' })).toBeTruthy());
+    const assistant = document.querySelector('article.assistant-item');
+    expect(assistant?.querySelector('.markdown-body strong')?.textContent).toBe('emphasis');
+    expect(MockEventSource.latest().closed).toBe(true);
+  });
+
   it('submits the prompt when pressing Meta+Enter in the textarea', async () => {
     render(<App />);
     expect(await screen.findByRole('heading', { name: 'Conversations' })).toBeTruthy();

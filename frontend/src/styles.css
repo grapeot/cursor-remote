@@ -289,6 +289,89 @@ h3 {
   box-shadow: 0 0 0 1px rgba(53, 97, 212, 0.08), var(--shadow-md);
 }
 
+.assistant-item .markdown-body {
+  color: var(--color-text-primary);
+  font-size: 0.93rem;
+  line-height: 1.55;
+}
+
+.assistant-item .markdown-body--empty {
+  min-height: 0;
+}
+
+.assistant-item .markdown-body > *:first-child {
+  margin-top: 0;
+}
+
+.assistant-item .markdown-body > *:last-child {
+  margin-bottom: 0;
+}
+
+.assistant-item .markdown-body h1,
+.assistant-item .markdown-body h2,
+.assistant-item .markdown-body h3,
+.assistant-item .markdown-body h4 {
+  margin: 12px 0 8px;
+  color: var(--color-primary);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.assistant-item .markdown-body h1 {
+  font-size: 1.12rem;
+}
+
+.assistant-item .markdown-body ul,
+.assistant-item .markdown-body ol {
+  margin: 0 0 10px;
+  padding-left: 1.35em;
+}
+
+.assistant-item .markdown-body li {
+  margin: 4px 0;
+}
+
+.assistant-item .markdown-body p {
+  margin: 0 0 10px;
+  white-space: normal;
+}
+
+.assistant-item .markdown-body blockquote {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--color-border);
+  background: rgba(53, 97, 212, 0.04);
+  color: var(--color-text-secondary);
+}
+
+.assistant-item .markdown-body a {
+  color: var(--color-primary-action);
+}
+
+.assistant-item .markdown-body table {
+  width: 100%;
+  margin: 10px 0;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.assistant-item .markdown-body th,
+.assistant-item .markdown-body td {
+  border: 1px solid var(--color-border);
+  padding: 6px 8px;
+}
+
+.assistant-item .markdown-body th {
+  background: var(--color-surface-muted);
+  text-align: left;
+}
+
+.assistant-item .markdown-body hr {
+  border: 0;
+  border-top: 1px solid var(--color-border-subtle);
+  margin: 14px 0;
+}
+
 .thinking-item,
 .status-item {
   border-style: dashed;
