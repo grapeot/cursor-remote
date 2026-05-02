@@ -16,7 +16,7 @@
 
 不论 Stage 几，都不做 connector 平台。这个项目在相当长一段时间内只针对 Cursor，不抽象 provider，不设计 OpenCode/Cursor/Claude Code 之间的通用 runtime，也不为了未来 connector 牺牲当前实现的直接性。
 
-部署边界按个人 Tailscale 网络设计。Server 暴露到 LA 机器或 Tailscale tailnet 内即可，认证由 Tailscale 完成。应用层不做 shared secret、bearer token、OAuth 或多用户 auth。Cursor API key 只存在 server 端，由 `.env` 提供；用户会手动把 token 写进 `.env`，项目不需要依赖 1Password service account 才能工作。
+部署边界按个人 Tailscale 网络设计。Server 暴露到 LA 机器或 Tailscale tailnet 内即可，认证由 Tailscale 完成。应用层不做 shared secret、bearer token、OAuth 或多用户 auth。Cursor API key 只存在 server 端，由 `.env` 提供；用户会手动把 token 写进 `.env`，项目不需要依赖 1Password service account 才能工作。Stage 1 默认 `HOST=0.0.0.0`、`PORT=8787`，方便 LAN/Tailscale 访问；需要纯本机调试时可以改成 `HOST=127.0.0.1`。
 
 当前阻塞式 POC 已经完成它的验证任务，后续作为 deprecated reference 保留。新实现应该围绕 session、run、event、SSE、持久化和测试重新组织，而不是在当前 `POST /api/runs -> run.wait()` 形态上继续增量补丁。
 
@@ -32,6 +32,7 @@ OpenCode 的价值在于 runtime 和 client 分得很清楚：`opencode serve` /
 
 - React web client，包含 session list、message/activity timeline 和 prompt composer。
 - Node/Express backend，持有 `CURSOR_API_KEY`、`CURSOR_RUNTIME=local`、`CURSOR_LOCAL_CWD` 和默认 model。Cloud runtime 可以保留为 SDK 对照实验，但产品路径按 local Cursor remote-control 设计。
+- 默认 self-bootstrapping cwd 指向本 repo：`/Users/grapeot/co/knowledge_working/adhoc_jobs/cursor_cloud_remote_poc`。产品运行时 Cursor 可以编辑这个应用自己；live tests 必须另建一次性 sandbox，避免直接修改真实 repo。
 - `Session` 抽象：用户看到的是一个长期对话，一个 session 可以包含多个 Cursor run。
 - `Run` 抽象：一次提交给 Cursor agent 的 prompt，必须归属于某个 session。
 - 异步 run lifecycle：提交 prompt 后立即返回，server 在后台运行 Cursor。
@@ -85,7 +86,7 @@ Stage 1 验证通过的标准：
 6. 一个 session 至少支持第一次 run 完成后的 follow-up prompt。
 7. Stage 1 的核心模块有可维护的测试覆盖，coverage report 能显示 storage、projection、API、SSE 和 mock gateway 的主要路径被覆盖。
 8. Live Cursor suite 在有 token 时可以客观判断 API 是否可用：`Cursor.me()` / `composer-2` 可用、sandbox 文件被写入、SSE 收到完整 run event、event replay 不丢事件、diff summary 能定位 changed files。
-9. README 清楚解释 `.env` 配置、Tailscale 暴露方式、默认 deterministic tests 和 opt-in live Cursor tests。
+9. README 清楚解释 `.env` 配置、`HOST=0.0.0.0` 的 Tailscale/LAN 暴露方式、默认 deterministic tests 和 opt-in live Cursor tests。
 
 ## 风险与约束
 

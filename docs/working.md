@@ -27,6 +27,9 @@
 - 设计决策：当前阻塞式 POC 标记为 deprecated reference。后续实现围绕 `EventStore`、`ProjectionStore`、`EventBroker`、`RunService`、`DiffService` 和 `CursorStreamMapper` 重建，不继续在单一 `POST /api/runs` launcher 上堆功能。
 - 设计决策：测试覆盖是一等需求。默认 deterministic suite 证明 app logic 正确；`RUN_CURSOR_LIVE_TESTS=1` 的 live Cursor suite 用真实 token、`composer-2` 和一次性 sandbox 判断 Cursor API 当前是否可用。
 - Evaluation plan 已细化到 `docs/test.md`：覆盖 unit、API integration、SSE replay、frontend projection、local diff、mock gateway event sequence、live Cursor sandbox、coverage gate 和 failure diagnosis matrix。
+- 运行约定：`.env` 已直接提供 `CURSOR_API_KEY`，不依赖 1Password。默认 `CURSOR_LOCAL_CWD` 指向本 repo 根目录，用于自举式开发；live tests 必须覆盖为临时 sandbox，不能改真实 repo。
+- 运行约定：Stage 1 server 默认 `HOST=0.0.0.0`、`PORT=8787`，方便 LAN/Tailscale 设备访问；Tailscale 只作为网络认证层，应用本身不做 token auth。
+- 工作节奏：Stage 1 按小 milestone 实现。每个 milestone 完成后更新 `working.md`，跑 typecheck/test/build，单独 commit，再进入下一个 milestone。
 
 ## Lessons Learned
 

@@ -16,7 +16,7 @@ Browser React app
   └── SSE: live run events and replay
 
 Node/Express server
-  ├── config: .env only for Cursor key, local cwd, model
+  ├── config: .env only for Cursor key, host, port, local cwd, model
   ├── SessionService: user-visible conversation state
   ├── RunService: async Cursor run lifecycle
   ├── CursorAgentGateway: @cursor/sdk adapter
@@ -36,7 +36,7 @@ Node/Express server
 
 Frontend 永远不直接调用 Cursor。Backend 持有 API key、SDK lifecycle、本地文件系统访问和 stream conversion。Frontend 只渲染 server state projection。
 
-网络边界交给 Tailscale。Server 可以监听 localhost、LAN IP 或 Tailscale IP；设备身份、ACL 和访问控制由 tailnet 处理。应用层不实现 shared secret、bearer token、OAuth 或多用户权限。应用代码只负责两件安全事项：Cursor API key 不出 server；UI 明确展示当前 cwd、runtime、run 状态和 prompt，降低远程误操作概率。
+网络边界交给 Tailscale。Stage 1 默认监听 `HOST=0.0.0.0`、`PORT=8787`，让同一 LAN 或 tailnet 内设备可以访问；纯本机调试时可以改成 `HOST=127.0.0.1`。设备身份、ACL 和访问控制由 tailnet 处理。应用层不实现 shared secret、bearer token、OAuth 或多用户权限。应用代码只负责两件安全事项：Cursor API key 不出 server；UI 明确展示当前 cwd、runtime、run 状态和 prompt，降低远程误操作概率。
 
 ## 核心模型
 
@@ -152,7 +152,7 @@ Stage 1 API 应该小而明确，并且是 app-specific。
 GET /api/health
 ```
 
-返回 runtime、是否配置 key、local cwd 状态、store 状态和是否处于 mock mode。绝不能返回 secret。
+返回 runtime、host、port、是否配置 key、local cwd 状态、store 状态和是否处于 mock mode。绝不能返回 secret。
 
 ### Sessions
 
@@ -164,7 +164,7 @@ PATCH /api/sessions/:sessionId
 DELETE /api/sessions/:sessionId
 ```
 
-`POST /api/sessions` 可接受可选 title。Runtime、cwd 和 default model 默认来自 `.env`，除非开发调试时显式覆盖。
+`POST /api/sessions` 可接受可选 title。Runtime、cwd 和 default model 默认来自 `.env`，除非开发调试时显式覆盖。Stage 1 默认 cwd 是这个 repo 根目录：`/Users/grapeot/co/knowledge_working/adhoc_jobs/cursor_cloud_remote_poc`，用于自举式开发；live tests 的 cwd 永远是测试创建的临时 sandbox。
 
 ### Messages
 
@@ -255,7 +255,7 @@ data/
 
 ## Local runtime 行为
 
-Local 是目标产品路径。Backend 跑在用户 Mac 或 LA 机器上，并把 Cursor SDK 指向 `CURSOR_LOCAL_CWD`。
+Local 是目标产品路径。Backend 跑在用户 Mac 或 LA 机器上，并把 Cursor SDK 指向 `CURSOR_LOCAL_CWD`。默认 `CURSOR_LOCAL_CWD` 指向本项目 repo 根目录，这样产品成熟后可以用 Cursor remote-control 来修改自己；测试路径必须和产品 cwd 分离。
 
 Diff/result review 应走本地 git。run 开始前记录 baseline git status 或 diff marker。run 完成后计算 changed files 和 diff summary。这个能力应该和 Cursor SDK streaming 分开，即使 Cursor 不返回 file metadata，也能工作。
 
