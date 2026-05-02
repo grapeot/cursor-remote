@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { AppConfig } from './config.js';
 import type { RunSummary, SendPromptRequest, StartRunRequest } from '../shared/contracts.js';
 import type { AppEventType } from '../shared/events.js';
+import { makeCursorStreamContext, mapCursorStreamMessage } from './cursorStreamMapper.js';
 
 export interface CursorAgentGateway {
   startRun(request: SendPromptRequest): Promise<RunSummary>;
@@ -207,17 +208,13 @@ export class CursorSdkGateway implements CursorAgentGateway, AsyncCursorGateway 
       model: { id: modelId },
       local: { cwd: this.config.localCwd }
     });
+    const streamContext = makeCursorStreamContext(runId, request, runtime, modelId);
 
     void (async () => {
       try {
         const run = await agent.send(request.prompt);
         for await (const message of run.stream()) {
-        const cursorEventType = readCursorEventType(message);
-        onEvent({
-          type: mapCursorEventType(message),
-          payload: message,
-          ...(cursorEventType ? { cursorEventType } : {})
-        });
+          mapCursorStreamMessage(message, streamContext).forEach(onEvent);
         }
         const result = await run.wait();
         onEvent({
@@ -234,6 +231,19 @@ export class CursorSdkGateway implements CursorAgentGateway, AsyncCursorGateway 
             status: result.status === 'finished' ? 'completed' : 'failed'
           }
         });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown Cursor SDK stream error.';
+        onEvent({ type: 'run.error', payload: { error: message } });
+        onEvent({
+          type: 'run.status',
+          payload: {
+            runId,
+            prompt: request.prompt,
+            runtime,
+            modelId,
+            status: 'failed'
+          }
+        });
       } finally {
         await agent[Symbol.asyncDispose]();
       }
@@ -248,29 +258,4 @@ export function createCursorGateway(config: AppConfig): CursorAgentGateway & Asy
     return new MockCursorAgentGateway();
   }
   return new CursorSdkGateway(config);
-}
-
-function readCursorEventType(message: unknown): string | undefined {
-  if (typeof message === 'object' && message !== null && 'type' in message) {
-    const value = message.type;
-    return typeof value === 'string' ? value : undefined;
-  }
-  return undefined;
-}
-
-function mapCursorEventType(message: unknown): AppEventType {
-  const type = readCursorEventType(message);
-  if (type === 'assistant') {
-    return 'assistant.delta';
-  }
-  if (type === 'thinking') {
-    return 'thinking.delta';
-  }
-  if (type === 'tool_call') {
-    return 'tool.delta';
-  }
-  if (type === 'task') {
-    return 'task.updated';
-  }
-  return 'assistant.delta';
 }
